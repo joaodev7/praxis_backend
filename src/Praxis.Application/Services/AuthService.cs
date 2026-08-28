@@ -98,6 +98,18 @@ public class AuthService
 
         var token = _jwtTokenService.GenerateToken(user);
 
+        // Record Login AuditLog
+        _context.AuditLogs.Add(new AuditLog
+        {
+            TenantId = user.TenantId,
+            UserId = user.Id,
+            Action = "LOGIN",
+            Entity = "User",
+            EntityId = user.Id.ToString(),
+            Metadata = $"Login bem-sucedido do usuário {user.Email}"
+        });
+        await _context.SaveChangesAsync();
+
         return new LoginResponse(
             token,
             new UserDto(user.Id, user.TenantId, user.Name, user.Email, user.Role, user.Status, user.NutritionistProfile?.Id),
@@ -118,5 +130,90 @@ public class AuthService
             throw new KeyNotFoundException("Usuário não encontrado.");
 
         return new UserDto(user.Id, user.TenantId, user.Name, user.Email, user.Role, user.Status, user.NutritionistProfile?.Id);
+    }
+
+    public async Task<object> ExportUserDataAsync()
+    {
+        if (!_currentUser.UserId.HasValue)
+            throw new UnauthorizedAccessException("Não autenticado.");
+
+        var userId = _currentUser.UserId.Value;
+        var user = await _context.Users
+            .Include(u => u.Tenant)
+            .Include(u => u.NutritionistProfile)
+            .FirstOrDefaultAsync(u => u.Id == userId);
+
+        if (user == null)
+            throw new KeyNotFoundException("Usuário não encontrado.");
+
+        var nutritionistId = user.NutritionistProfile?.Id;
+
+        var arts = await _context.ARTs
+            .Where(a => (nutritionistId.HasValue && a.NutritionistId == nutritionistId.Value) || a.TenantId == user.TenantId)
+            .Select(a => new
+            {
+                a.Id,
+                a.Number,
+                a.StartDate,
+                a.EndDate,
+                status = a.Status.ToString(),
+                a.Notes,
+                a.CreatedAt
+            })
+            .ToListAsync();
+
+        var visits = await _context.Visits
+            .Where(v => (nutritionistId.HasValue && v.NutritionistId == nutritionistId.Value) || v.TenantId == user.TenantId)
+            .Select(v => new
+            {
+                v.Id,
+                v.ScheduledAt,
+                v.StartedAt,
+                v.FinishedAt,
+                status = v.Status.ToString(),
+                v.Notes,
+                v.CreatedAt
+            })
+            .ToListAsync();
+
+        return new
+        {
+            meta = new
+            {
+                exportDate = DateTime.UtcNow,
+                purpose = "Relatório de Portabilidade de Dados Pessoais - LGPD (Art. 18, Inciso V da Lei nº 13.709/2018)",
+                system = "PRAXIS - Gestão de Responsabilidade Técnica"
+            },
+            user = new
+            {
+                user.Id,
+                user.Name,
+                user.Email,
+                role = user.Role.ToString(),
+                status = user.Status.ToString(),
+                user.CreatedAt,
+                user.UpdatedAt
+            },
+            nutritionistProfile = user.NutritionistProfile == null ? null : new
+            {
+                user.NutritionistProfile.Id,
+                user.NutritionistProfile.Crn,
+                user.NutritionistProfile.Phone,
+                status = user.NutritionistProfile.Status.ToString()
+            },
+            tenant = user.Tenant == null ? null : new
+            {
+                user.Tenant.Id,
+                user.Tenant.Name,
+                user.Tenant.LegalName,
+                user.Tenant.Cnpj,
+                user.Tenant.Email,
+                user.Tenant.Phone,
+                status = user.Tenant.Status.ToString(),
+                user.Tenant.CreatedAt
+            },
+            associatedARTs = arts,
+            associatedVisits = visits
+        };
     }
 }

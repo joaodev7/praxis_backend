@@ -46,7 +46,7 @@ public class EvidencesController : ControllerBase
             return BadRequest(new { message = $"Tipo MIME inválido ({file.ContentType})." });
 
         using var stream = file.OpenReadStream();
-        var url = await _evidenceService.UploadFileAsync(stream, file.FileName, file.ContentType);
+        var url = await _evidenceService.UploadFileAsync(stream, file.FileName, contentType);
 
         return Ok(new { url, fileName = file.FileName, size = file.Length });
     }

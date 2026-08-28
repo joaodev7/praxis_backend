@@ -156,9 +156,10 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
     public Guid CurrentTenantId => _currentUser.TenantId ?? Guid.Empty;
     public bool HasTenantFilter => _currentUser.Role != UserRole.PraxisAdmin && _currentUser.TenantId.HasValue;
 
-    public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
-        var entries = ChangeTracker.Entries();
+        var entries = ChangeTracker.Entries().ToList();
+        var auditList = new List<AuditLog>();
 
         foreach (var entry in entries)
         {
@@ -182,8 +183,44 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
                     tenantEntity.TenantId = _currentUser.TenantId.Value;
                 }
             }
+
+            // Create audit log for changes (excluding AuditLog itself to prevent loop)
+            if (entry.Entity is not AuditLog && 
+                (entry.State == EntityState.Added || entry.State == EntityState.Modified || entry.State == EntityState.Deleted))
+            {
+                var entityType = entry.Entity.GetType().Name;
+                var action = entry.State switch
+                {
+                    EntityState.Added => "CREATE",
+                    EntityState.Modified => "UPDATE",
+                    EntityState.Deleted => "DELETE",
+                    _ => entry.State.ToString()
+                };
+
+                var entityId = entry.Properties.FirstOrDefault(p => p.Metadata.IsPrimaryKey())?.CurrentValue?.ToString() ?? string.Empty;
+                var tenantId = _currentUser.TenantId;
+                if (entry.Entity is ITenantEntity te && te.TenantId != Guid.Empty)
+                {
+                    tenantId = te.TenantId;
+                }
+
+                auditList.Add(new AuditLog
+                {
+                    TenantId = tenantId,
+                    UserId = _currentUser.UserId,
+                    Action = action,
+                    Entity = entityType,
+                    EntityId = entityId,
+                    Metadata = $"Ação {action} em {entityType} pelo usuário {_currentUser.UserEmail ?? _currentUser.UserId?.ToString() ?? "Sistema"}"
+                });
+            }
         }
 
-        return base.SaveChangesAsync(cancellationToken);
+        if (auditList.Count > 0)
+        {
+            AuditLogs.AddRange(auditList);
+        }
+
+        return await base.SaveChangesAsync(cancellationToken);
     }
 }

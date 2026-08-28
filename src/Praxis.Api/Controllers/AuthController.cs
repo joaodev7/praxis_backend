@@ -39,4 +39,12 @@ public class AuthController : ControllerBase
         var user = await _authService.GetCurrentUserAsync();
         return Ok(user);
     }
+
+    [Authorize]
+    [HttpGet("export-data")]
+    public async Task<ActionResult<object>> ExportData()
+    {
+        var data = await _authService.ExportUserDataAsync();
+        return Ok(data);
+    }
 }
