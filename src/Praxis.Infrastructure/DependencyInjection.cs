@@ -14,7 +14,12 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructureServices(this IServiceCollection services, IConfiguration configuration)
     {
-        var connectionString = configuration.GetConnectionString("DefaultConnection");
+        var rawConnectionString = configuration.GetConnectionString("DefaultConnection")
+            ?? configuration["DATABASE_URL"]
+            ?? configuration["DefaultConnection"]
+            ?? configuration["ConnectionStrings:DefaultConnection"];
+
+        var connectionString = FormatPostgresConnectionString(rawConnectionString);
 
         services.AddDbContext<ApplicationDbContext>(options =>
         {
@@ -63,5 +68,39 @@ public static class DependencyInjection
         services.AddSingleton<IFileStorageService, FileStorageService>();
 
         return services;
+    }
+
+    private static string? FormatPostgresConnectionString(string? connectionString)
+    {
+        if (string.IsNullOrWhiteSpace(connectionString))
+            return connectionString;
+
+        connectionString = connectionString.Trim().Trim('"').Trim('\'');
+
+        if (connectionString.StartsWith("postgres://", StringComparison.OrdinalIgnoreCase) ||
+            connectionString.StartsWith("postgresql://", StringComparison.OrdinalIgnoreCase))
+        {
+            var uri = new Uri(connectionString);
+            var userInfo = uri.UserInfo.Split(':');
+            var username = userInfo.Length > 0 ? Uri.UnescapeDataString(userInfo[0]) : "";
+            var password = userInfo.Length > 1 ? Uri.UnescapeDataString(userInfo[1]) : "";
+            var host = uri.Host;
+            var port = uri.Port > 0 ? uri.Port : 5432;
+            var database = uri.AbsolutePath.TrimStart('/');
+
+            var builder = new Npgsql.NpgsqlConnectionStringBuilder
+            {
+                Host = host,
+                Port = port,
+                Database = database,
+                Username = username,
+                Password = password,
+                SslMode = Npgsql.SslMode.Require
+            };
+
+            return builder.ConnectionString;
+        }
+
+        return connectionString;
     }
 }
