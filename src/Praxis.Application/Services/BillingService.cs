@@ -31,10 +31,11 @@ public class BillingService : IBillingService
             .AsNoTracking()
             .Include(p => p.Features)
             .Where(p => p.IsActive)
-            .OrderBy(p => p.MonthlyPrice)
             .ToListAsync(ct);
 
-        return plans.Select(p => new PlanDto
+        return plans
+            .OrderBy(p => p.MonthlyPrice)
+            .Select(p => new PlanDto
         {
             Id = p.Id,
             Name = p.Name,
@@ -59,8 +60,9 @@ public class BillingService : IBillingService
     {
         var tenantId = _currentUser.TenantId ?? throw new UnauthorizedAccessException("Tenant não identificado.");
 
+        var planCodeLower = request.PlanCode.ToLower();
         var plan = await _context.Plans
-            .FirstOrDefaultAsync(p => p.Code.Equals(request.PlanCode, StringComparison.OrdinalIgnoreCase) && p.IsActive, ct)
+            .FirstOrDefaultAsync(p => p.Code.ToLower() == planCodeLower && p.IsActive, ct)
             ?? throw new KeyNotFoundException($"Plano '{request.PlanCode}' não encontrado ou inativo.");
 
         var tenant = await _context.Tenants
@@ -194,8 +196,9 @@ public class BillingService : IBillingService
     {
         var tenantId = _currentUser.TenantId ?? throw new UnauthorizedAccessException("Tenant não identificado.");
 
+        var newPlanCodeLower = request.NewPlanCode.ToLower();
         var newPlan = await _context.Plans
-            .FirstOrDefaultAsync(p => p.Code.Equals(request.NewPlanCode, StringComparison.OrdinalIgnoreCase) && p.IsActive, ct)
+            .FirstOrDefaultAsync(p => p.Code.ToLower() == newPlanCodeLower && p.IsActive, ct)
             ?? throw new KeyNotFoundException($"Plano '{request.NewPlanCode}' não encontrado.");
 
         var subscription = await _context.Subscriptions
@@ -228,8 +231,9 @@ public class BillingService : IBillingService
     {
         var tenantId = _currentUser.TenantId ?? throw new UnauthorizedAccessException("Tenant não identificado.");
 
+        var targetPlanCodeLower = request.NewPlanCode.ToLower();
         var targetPlan = await _context.Plans
-            .FirstOrDefaultAsync(p => p.Code.Equals(request.NewPlanCode, StringComparison.OrdinalIgnoreCase) && p.IsActive, ct)
+            .FirstOrDefaultAsync(p => p.Code.ToLower() == targetPlanCodeLower && p.IsActive, ct)
             ?? throw new KeyNotFoundException($"Plano '{request.NewPlanCode}' não encontrado.");
 
         // Check active entity limits

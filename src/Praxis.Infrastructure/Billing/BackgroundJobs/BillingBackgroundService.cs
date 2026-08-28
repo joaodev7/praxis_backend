@@ -46,6 +46,7 @@ public class BillingBackgroundService : BackgroundService
 
         // 1. Expire ended Trials
         var expiredTrials = await context.Subscriptions
+            .IgnoreQueryFilters()
             .Where(s => s.Status == SubscriptionStatus.Trial && s.TrialEndsAt != null && s.TrialEndsAt.Value < now)
             .ToListAsync(ct);
 
@@ -58,6 +59,7 @@ public class BillingBackgroundService : BackgroundService
 
         // 2. Suspend past due accounts after grace period
         var pastDueToSuspend = await context.Subscriptions
+            .IgnoreQueryFilters()
             .Where(s => s.Status == SubscriptionStatus.PastDue && s.GracePeriodEndsAt != null && s.GracePeriodEndsAt.Value < now)
             .ToListAsync(ct);
 
@@ -70,6 +72,7 @@ public class BillingBackgroundService : BackgroundService
 
         // 3. Process scheduled cancellations after period ends
         var cancelledToFinish = await context.Subscriptions
+            .IgnoreQueryFilters()
             .Where(s => s.Status == SubscriptionStatus.Cancelled && s.EndsAtPeriodEnd && s.CurrentPeriodEnd != null && s.CurrentPeriodEnd.Value < now)
             .ToListAsync(ct);
 
