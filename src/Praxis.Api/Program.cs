@@ -29,27 +29,14 @@ builder.Services.AddApplicationServices();
 builder.Services.AddInfrastructureServices(builder.Configuration);
 
 // CORS
-var configuredOrigins = builder.Configuration.GetSection("CORS:Origins").Get<string[]>() 
-    ?? builder.Configuration["CORS_ORIGINS"]?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowPraxisFrontend", policy =>
     {
-        if (configuredOrigins != null && configuredOrigins.Length > 0)
-        {
-            policy.WithOrigins(configuredOrigins)
-                  .AllowAnyMethod()
-                  .AllowAnyHeader()
-                  .AllowCredentials();
-        }
-        else
-        {
-            policy.SetIsOriginAllowed(_ => true)
-                  .AllowAnyMethod()
-                  .AllowAnyHeader()
-                  .AllowCredentials();
-        }
+        policy.SetIsOriginAllowed(_ => true)
+              .AllowAnyMethod()
+              .AllowAnyHeader()
+              .AllowCredentials();
     });
 
     options.AddPolicy("AllowAll", policy =>
