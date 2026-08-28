@@ -17,6 +17,8 @@ public static class DependencyInjection
         services.AddScoped<NonConformityService>();
         services.AddScoped<EvidenceService>();
         services.AddScoped<DashboardService>();
+        services.AddScoped<Praxis.Application.Interfaces.IEntitlementService, EntitlementService>();
+        services.AddScoped<Praxis.Application.Interfaces.IBillingService, BillingService>();
 
         return services;
     }

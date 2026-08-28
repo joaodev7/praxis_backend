@@ -32,12 +32,56 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
     public DbSet<ActionItem> ActionItems => Set<ActionItem>();
     public DbSet<Evidence> Evidences => Set<Evidence>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+    public DbSet<Plan> Plans => Set<Plan>();
+    public DbSet<PlanFeature> PlanFeatures => Set<PlanFeature>();
+    public DbSet<Subscription> Subscriptions => Set<Subscription>();
+    public DbSet<SubscriptionFeatureOverride> SubscriptionFeatureOverrides => Set<SubscriptionFeatureOverride>();
+    public DbSet<Payment> Payments => Set<Payment>();
+    public DbSet<PaymentWebhookEvent> PaymentWebhookEvents => Set<PaymentWebhookEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
 
         // Configure indexes and relationships
+        modelBuilder.Entity<Plan>(entity =>
+        {
+            entity.HasIndex(p => p.Code).IsUnique();
+        });
+
+        modelBuilder.Entity<Subscription>(entity =>
+        {
+            entity.HasOne(s => s.Tenant)
+                  .WithMany(t => t.Subscriptions)
+                  .HasForeignKey(s => s.TenantId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(s => s.Plan)
+                  .WithMany(p => p.Subscriptions)
+                  .HasForeignKey(s => s.PlanId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Payment>(entity =>
+        {
+            entity.HasOne(p => p.Subscription)
+                  .WithMany(s => s.Payments)
+                  .HasForeignKey(p => p.SubscriptionId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(p => p.Tenant)
+                  .WithMany(t => t.Payments)
+                  .HasForeignKey(p => p.TenantId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(p => p.ProviderPaymentId);
+        });
+
+        modelBuilder.Entity<PaymentWebhookEvent>(entity =>
+        {
+            entity.HasIndex(w => new { w.Provider, w.ProviderEventId }).IsUnique();
+        });
+
         modelBuilder.Entity<Tenant>(entity =>
         {
             entity.HasIndex(t => t.Cnpj).IsUnique();

@@ -69,6 +69,25 @@ public class AuthService
         };
         _context.Checklists.Add(defaultChecklist);
 
+        // Create 14-day Professional Trial Subscription
+        var proPlan = await _context.Plans.FirstOrDefaultAsync(p => p.Code == "professional");
+        if (proPlan != null)
+        {
+            var subscription = new Subscription
+            {
+                TenantId = tenant.Id,
+                PlanId = proPlan.Id,
+                Status = SubscriptionStatus.Trial,
+                BillingCycle = BillingCycle.Monthly,
+                StartedAt = DateTime.UtcNow,
+                TrialEndsAt = DateTime.UtcNow.AddDays(14),
+                CurrentPeriodStart = DateTime.UtcNow,
+                CurrentPeriodEnd = DateTime.UtcNow.AddMonths(1),
+                PaymentProvider = "Asaas"
+            };
+            _context.Subscriptions.Add(subscription);
+        }
+
         await _context.SaveChangesAsync();
 
         var token = _jwtTokenService.GenerateToken(adminUser);

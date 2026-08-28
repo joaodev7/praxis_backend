@@ -10,11 +10,16 @@ public class NutritionistService
 {
     private readonly IApplicationDbContext _context;
     private readonly ICurrentUserService _currentUser;
+    private readonly IEntitlementService _entitlementService;
 
-    public NutritionistService(IApplicationDbContext context, ICurrentUserService currentUser)
+    public NutritionistService(
+        IApplicationDbContext context,
+        ICurrentUserService currentUser,
+        IEntitlementService entitlementService)
     {
         _context = context;
         _currentUser = currentUser;
+        _entitlementService = entitlementService;
     }
 
     public async Task<List<NutritionistDto>> GetAllAsync()
@@ -64,6 +69,9 @@ public class NutritionistService
     public async Task<NutritionistDto> CreateAsync(CreateNutritionistRequest request)
     {
         var tenantId = _currentUser.TenantId ?? throw new UnauthorizedAccessException("Tenant não identificado.");
+
+        // Validate plan limit before adding
+        await _entitlementService.ValidateLimitAsync(tenantId, "max_nutritionists");
 
         var existingUser = await _context.Users.AnyAsync(u => u.Email.ToLower() == request.Email.ToLower());
         if (existingUser)

@@ -10,11 +10,16 @@ public class ClientService
 {
     private readonly IApplicationDbContext _context;
     private readonly ICurrentUserService _currentUser;
+    private readonly IEntitlementService _entitlementService;
 
-    public ClientService(IApplicationDbContext context, ICurrentUserService currentUser)
+    public ClientService(
+        IApplicationDbContext context,
+        ICurrentUserService currentUser,
+        IEntitlementService entitlementService)
     {
         _context = context;
         _currentUser = currentUser;
+        _entitlementService = entitlementService;
     }
 
     public async Task<List<ClientCompanyDto>> GetAllAsync()
@@ -68,6 +73,9 @@ public class ClientService
     public async Task<ClientCompanyDto> CreateAsync(CreateClientCompanyRequest request)
     {
         var tenantId = _currentUser.TenantId ?? throw new UnauthorizedAccessException("Tenant não identificado.");
+
+        // Validate plan limit before adding
+        await _entitlementService.ValidateLimitAsync(tenantId, "max_client_companies");
 
         var client = new ClientCompany
         {

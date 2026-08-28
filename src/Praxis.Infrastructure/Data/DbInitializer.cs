@@ -8,7 +8,101 @@ public static class DbInitializer
 {
     public static async Task SeedAsync(ApplicationDbContext context)
     {
-        // If database already initialized, ensure name is updated to Dra. Jamily Pinto
+        // 1. Seed Plans if not present
+        if (!await context.Plans.IgnoreQueryFilters().AnyAsync())
+        {
+            var planEssential = new Plan
+            {
+                Name = "PRAXIS Essencial",
+                Code = "essential",
+                Description = "Ideal para pequenas consultorias e empresas que estão estruturando sua operação.",
+                MonthlyPrice = 149.00m,
+                AnnualPrice = 1490.00m,
+                MaxNutritionists = 3,
+                MaxClientCompanies = 10,
+                MaxStorageMb = 1000,
+                IsActive = true,
+                Features = new List<PlanFeature>
+                {
+                    new() { FeatureCode = "dashboard", IsEnabled = true },
+                    new() { FeatureCode = "clients", IsEnabled = true },
+                    new() { FeatureCode = "units", IsEnabled = true },
+                    new() { FeatureCode = "nutritionists", IsEnabled = true },
+                    new() { FeatureCode = "arts", IsEnabled = true },
+                    new() { FeatureCode = "visits", IsEnabled = true },
+                    new() { FeatureCode = "checklists", IsEnabled = true },
+                    new() { FeatureCode = "photos", IsEnabled = true },
+                    new() { FeatureCode = "pdf_export", IsEnabled = true }
+                }
+            };
+
+            var planProfessional = new Plan
+            {
+                Name = "PRAXIS Profissional",
+                Code = "professional",
+                Description = "Para consultorias em crescimento que precisam de indicadores e gestão mais completa.",
+                MonthlyPrice = 299.00m,
+                AnnualPrice = 2990.00m,
+                MaxNutritionists = 10,
+                MaxClientCompanies = 50,
+                MaxStorageMb = 5000,
+                IsActive = true,
+                Features = new List<PlanFeature>
+                {
+                    new() { FeatureCode = "dashboard", IsEnabled = true },
+                    new() { FeatureCode = "clients", IsEnabled = true },
+                    new() { FeatureCode = "units", IsEnabled = true },
+                    new() { FeatureCode = "nutritionists", IsEnabled = true },
+                    new() { FeatureCode = "arts", IsEnabled = true },
+                    new() { FeatureCode = "visits", IsEnabled = true },
+                    new() { FeatureCode = "checklists", IsEnabled = true },
+                    new() { FeatureCode = "photos", IsEnabled = true },
+                    new() { FeatureCode = "pdf_export", IsEnabled = true },
+                    new() { FeatureCode = "advanced_analytics", IsEnabled = true },
+                    new() { FeatureCode = "period_comparison", IsEnabled = true },
+                    new() { FeatureCode = "excel_export", IsEnabled = true },
+                    new() { FeatureCode = "custom_reports", IsEnabled = true },
+                    new() { FeatureCode = "priority_support", IsEnabled = true }
+                }
+            };
+
+            var planEnterprise = new Plan
+            {
+                Name = "PRAXIS Enterprise",
+                Code = "enterprise",
+                Description = "Operações maiores ou redes com necessidades específicas e limites personalizados.",
+                MonthlyPrice = 0.00m,
+                AnnualPrice = 0.00m,
+                MaxNutritionists = 999,
+                MaxClientCompanies = 999,
+                MaxStorageMb = 50000,
+                IsActive = true,
+                Features = new List<PlanFeature>
+                {
+                    new() { FeatureCode = "dashboard", IsEnabled = true },
+                    new() { FeatureCode = "clients", IsEnabled = true },
+                    new() { FeatureCode = "units", IsEnabled = true },
+                    new() { FeatureCode = "nutritionists", IsEnabled = true },
+                    new() { FeatureCode = "arts", IsEnabled = true },
+                    new() { FeatureCode = "visits", IsEnabled = true },
+                    new() { FeatureCode = "checklists", IsEnabled = true },
+                    new() { FeatureCode = "photos", IsEnabled = true },
+                    new() { FeatureCode = "pdf_export", IsEnabled = true },
+                    new() { FeatureCode = "advanced_analytics", IsEnabled = true },
+                    new() { FeatureCode = "period_comparison", IsEnabled = true },
+                    new() { FeatureCode = "excel_export", IsEnabled = true },
+                    new() { FeatureCode = "custom_reports", IsEnabled = true },
+                    new() { FeatureCode = "priority_support", IsEnabled = true },
+                    new() { FeatureCode = "dedicated_support", IsEnabled = true },
+                    new() { FeatureCode = "custom_integrations", IsEnabled = true }
+                }
+            };
+
+            context.Plans.AddRange(planEssential, planProfessional, planEnterprise);
+            await context.SaveChangesAsync();
+        }
+
+        // If database already initialized, ensure name is updated to Dra. Jamily Pinto and ensure subscriptions exist
         if (await context.Tenants.IgnoreQueryFilters().AnyAsync())
         {
             var existingUsers = await context.Users.IgnoreQueryFilters()
@@ -19,6 +113,30 @@ public static class DbInitializer
             {
                 user.Name = "Dra. Jamily Pinto";
             }
+
+            var defaultPlan = await context.Plans.IgnoreQueryFilters().FirstOrDefaultAsync(p => p.Code == "professional");
+            if (defaultPlan != null)
+            {
+                var tenantsWithoutSub = await context.Tenants.IgnoreQueryFilters()
+                    .Where(t => !context.Subscriptions.IgnoreQueryFilters().Any(s => s.TenantId == t.Id))
+                    .ToListAsync();
+
+                foreach (var t in tenantsWithoutSub)
+                {
+                    context.Subscriptions.Add(new Subscription
+                    {
+                        TenantId = t.Id,
+                        PlanId = defaultPlan.Id,
+                        Status = SubscriptionStatus.Trial,
+                        BillingCycle = BillingCycle.Monthly,
+                        StartedAt = DateTime.UtcNow,
+                        TrialEndsAt = DateTime.UtcNow.AddDays(14),
+                        CurrentPeriodStart = DateTime.UtcNow,
+                        CurrentPeriodEnd = DateTime.UtcNow.AddMonths(1)
+                    });
+                }
+            }
+
             await context.SaveChangesAsync();
             return;
         }

@@ -67,6 +67,27 @@ public static class DependencyInjection
         services.AddScoped<IPdfReportService, PdfReportService>();
         services.AddSingleton<IFileStorageService, FileStorageService>();
 
+        // Asaas Payment Provider Configuration
+        services.Configure<Praxis.Infrastructure.Billing.PaymentProviders.Asaas.AsaasOptions>(options =>
+        {
+            configuration.GetSection(Praxis.Infrastructure.Billing.PaymentProviders.Asaas.AsaasOptions.SectionName).Bind(options);
+
+            // Override with environment variables if present
+            var envApiKey = configuration["ASAAS_API_KEY"] ?? configuration["ASAAS:API_KEY"];
+            if (!string.IsNullOrWhiteSpace(envApiKey)) options.ApiKey = envApiKey;
+
+            var envWebhookToken = configuration["ASAAS_WEBHOOK_TOKEN"] ?? configuration["ASAAS:WEBHOOK_TOKEN"];
+            if (!string.IsNullOrWhiteSpace(envWebhookToken)) options.WebhookToken = envWebhookToken;
+
+            var envEnvironment = configuration["ASAAS_ENVIRONMENT"] ?? configuration["ASAAS:ENVIRONMENT"];
+            if (!string.IsNullOrWhiteSpace(envEnvironment)) options.Environment = envEnvironment;
+        });
+
+        services.AddHttpClient<Praxis.Infrastructure.Billing.PaymentProviders.Asaas.AsaasHttpClient>();
+        services.AddScoped<Praxis.Application.Interfaces.IPaymentGateway, Praxis.Infrastructure.Billing.PaymentProviders.Asaas.AsaasPaymentGateway>();
+        services.AddScoped<Praxis.Application.Interfaces.IAsaasWebhookService, Praxis.Infrastructure.Billing.PaymentProviders.Asaas.AsaasWebhookService>();
+        services.AddHostedService<Praxis.Infrastructure.Billing.BackgroundJobs.BillingBackgroundService>();
+
         return services;
     }
 

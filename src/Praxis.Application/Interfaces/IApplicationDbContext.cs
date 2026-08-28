@@ -20,6 +20,12 @@ public interface IApplicationDbContext
     DbSet<ActionItem> ActionItems { get; }
     DbSet<Evidence> Evidences { get; }
     DbSet<AuditLog> AuditLogs { get; }
+    DbSet<Plan> Plans { get; }
+    DbSet<PlanFeature> PlanFeatures { get; }
+    DbSet<Subscription> Subscriptions { get; }
+    DbSet<SubscriptionFeatureOverride> SubscriptionFeatureOverrides { get; }
+    DbSet<Payment> Payments { get; }
+    DbSet<PaymentWebhookEvent> PaymentWebhookEvents { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

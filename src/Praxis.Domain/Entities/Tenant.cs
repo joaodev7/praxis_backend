@@ -18,4 +18,6 @@ public class Tenant : BaseEntity, ISoftDeletable
     public ICollection<Nutritionist> Nutritionists { get; set; } = new List<Nutritionist>();
     public ICollection<ClientCompany> ClientCompanies { get; set; } = new List<ClientCompany>();
     public ICollection<Checklist> Checklists { get; set; } = new List<Checklist>();
+    public ICollection<Subscription> Subscriptions { get; set; } = new List<Subscription>();
+    public ICollection<Payment> Payments { get; set; } = new List<Payment>();
 }
