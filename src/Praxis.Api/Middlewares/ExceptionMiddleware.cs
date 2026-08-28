@@ -7,11 +7,13 @@ public class ExceptionMiddleware
 {
     private readonly RequestDelegate _next;
     private readonly ILogger<ExceptionMiddleware> _logger;
+    private readonly IWebHostEnvironment _env;
 
-    public ExceptionMiddleware(RequestDelegate next, ILogger<ExceptionMiddleware> logger)
+    public ExceptionMiddleware(RequestDelegate next, ILogger<ExceptionMiddleware> logger, IWebHostEnvironment env)
     {
         _next = next;
         _logger = logger;
+        _env = env;
     }
 
     public async Task InvokeAsync(HttpContext context)
@@ -27,7 +29,7 @@ public class ExceptionMiddleware
         }
     }
 
-    private static Task HandleExceptionAsync(HttpContext context, Exception exception)
+    private Task HandleExceptionAsync(HttpContext context, Exception exception)
     {
         context.Response.ContentType = "application/json";
 
@@ -42,11 +44,35 @@ public class ExceptionMiddleware
 
         context.Response.StatusCode = statusCode;
 
+        string message;
+        string? detailed = null;
+
+        if (statusCode == (int)HttpStatusCode.InternalServerError)
+        {
+            if (_env.IsDevelopment())
+            {
+                message = exception.Message;
+                detailed = exception.InnerException?.Message;
+            }
+            else
+            {
+                message = "Ocorreu um erro interno no servidor. Se o problema persistir, contate o suporte.";
+            }
+        }
+        else
+        {
+            message = exception.Message;
+            if (_env.IsDevelopment())
+            {
+                detailed = exception.InnerException?.Message;
+            }
+        }
+
         var response = new
         {
             statusCode,
-            message = exception.Message,
-            detailed = exception.InnerException?.Message
+            message,
+            detailed
         };
 
         return context.Response.WriteAsync(JsonSerializer.Serialize(response));

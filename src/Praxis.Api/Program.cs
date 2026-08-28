@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.OpenApi.Models;
@@ -8,6 +9,7 @@ using Praxis.Application.Interfaces;
 using Praxis.Infrastructure;
 using Praxis.Infrastructure.Data;
 using System.Text.Json.Serialization;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -27,24 +29,27 @@ builder.Services.AddApplicationServices();
 builder.Services.AddInfrastructureServices(builder.Configuration);
 
 // CORS
-var corsOrigins = builder.Configuration.GetSection("CORS:Origins").Get<string[]>() 
-    ?? new[] 
-    { 
-        "http://localhost:5173", 
-        "http://127.0.0.1:5173", 
-        "http://localhost:3000", 
-        "http://localhost:8080",
-        "http://127.0.0.1:8080"
-    };
+var configuredOrigins = builder.Configuration.GetSection("CORS:Origins").Get<string[]>() 
+    ?? builder.Configuration["CORS_ORIGINS"]?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowPraxisFrontend", policy =>
     {
-        policy.WithOrigins(corsOrigins)
-              .AllowAnyMethod()
-              .AllowAnyHeader()
-              .AllowCredentials();
+        if (configuredOrigins != null && configuredOrigins.Length > 0)
+        {
+            policy.WithOrigins(configuredOrigins)
+                  .AllowAnyMethod()
+                  .AllowAnyHeader()
+                  .AllowCredentials();
+        }
+        else
+        {
+            policy.SetIsOriginAllowed(_ => true)
+                  .AllowAnyMethod()
+                  .AllowAnyHeader()
+                  .AllowCredentials();
+        }
     });
 
     options.AddPolicy("AllowAll", policy =>
@@ -52,6 +57,53 @@ builder.Services.AddCors(options =>
         policy.AllowAnyOrigin()
               .AllowAnyMethod()
               .AllowAnyHeader();
+    });
+});
+
+// Rate Limiting
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    options.OnRejected = async (context, token) =>
+    {
+        context.HttpContext.Response.ContentType = "application/json";
+        var response = new
+        {
+            statusCode = StatusCodes.Status429TooManyRequests,
+            message = "Muitas requisições. Por favor, aguarde alguns instantes antes de tentar novamente."
+        };
+        await context.HttpContext.Response.WriteAsync(System.Text.Json.JsonSerializer.Serialize(response), token);
+    };
+
+    // Global rate limiter per IP (120 req/min)
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
+    {
+        var clientIp = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: clientIp,
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 120,
+                Window = TimeSpan.FromMinutes(1),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 5
+            });
+    });
+
+    // Strict rate limiter for Auth (login/register): 10 req/min per IP
+    options.AddPolicy("AuthRateLimit", httpContext =>
+    {
+        var clientIp = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: clientIp,
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            });
     });
 });
 
@@ -113,21 +165,32 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
-// Exception Middleware
+// Security Headers & Exception Middleware
+app.UseMiddleware<SecurityHeadersMiddleware>();
 app.UseMiddleware<ExceptionMiddleware>();
 
 // Configure HTTP request pipeline
-app.UseSwagger();
-app.UseSwaggerUI(c =>
+var enableSwagger = app.Environment.IsDevelopment() || builder.Configuration.GetValue<bool>("Swagger:Enabled", true);
+if (enableSwagger)
 {
-    c.SwaggerEndpoint("/swagger/v1/swagger.json", "PRAXIS API v1");
-    c.RoutePrefix = "swagger";
-});
+    app.UseSwagger();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "PRAXIS API v1");
+        c.RoutePrefix = "swagger";
+    });
 
-// Redirect root to Swagger for convenient local access
-app.MapGet("/", () => Results.Redirect("/swagger"));
+    // Redirect root to Swagger for convenient local access
+    app.MapGet("/", () => Results.Redirect("/swagger"));
+}
+else
+{
+    app.MapGet("/", () => Results.Ok(new { status = "PRAXIS API v1 Running" }));
+}
 
 app.UseCors("AllowPraxisFrontend");
+
+app.UseRateLimiter();
 
 // Serve uploaded files statically
 var uploadsDir = Path.Combine(Directory.GetCurrentDirectory(), "uploads");

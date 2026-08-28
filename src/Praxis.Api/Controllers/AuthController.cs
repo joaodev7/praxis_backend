@@ -1,10 +1,12 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Praxis.Application.DTOs;
 using Praxis.Application.Services;
 
 namespace Praxis.Api.Controllers;
 
+[EnableRateLimiting("AuthRateLimit")]
 [ApiController]
 [Route("api/[controller]")]
 public class AuthController : ControllerBase
