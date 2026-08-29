@@ -8,7 +8,15 @@ public class AsaasOptions
     public string ApiKey { get; set; } = string.Empty;
     public string WebhookToken { get; set; } = string.Empty;
 
-    public string BaseUrl => Environment.Equals("Production", StringComparison.OrdinalIgnoreCase)
-        ? "https://api.asaas.com/v3"
-        : "https://sandbox.asaas.com/api/v3";
+    public string BaseUrl
+    {
+        get
+        {
+            var url = Environment.Equals("Production", StringComparison.OrdinalIgnoreCase)
+                ? "https://api.asaas.com/v3/"
+                : "https://sandbox.asaas.com/api/v3/";
+
+            return url.EndsWith('/') ? url : $"{url}/";
+        }
+    }
 }

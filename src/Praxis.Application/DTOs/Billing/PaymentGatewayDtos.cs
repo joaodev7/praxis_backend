@@ -65,6 +65,8 @@ public class GatewayPaymentResult
     public DateTime? PaymentDate { get; set; }
     public string? InvoiceUrl { get; set; }
     public string? BankSlipUrl { get; set; }
+    public bool Success { get; set; }
+    public string? ErrorMessage { get; set; }
 }
 
 public class GatewayPixQrCodeResult

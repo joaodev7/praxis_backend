@@ -25,7 +25,13 @@ public static class DependencyInjection
         {
             if (!string.IsNullOrEmpty(connectionString))
             {
-                options.UseNpgsql(connectionString);
+                options.UseNpgsql(connectionString, npgsqlOptions =>
+                {
+                    npgsqlOptions.EnableRetryOnFailure(
+                        maxRetryCount: 5,
+                        maxRetryDelay: TimeSpan.FromSeconds(5),
+                        errorCodesToAdd: null);
+                });
             }
             else
             {
@@ -116,7 +122,10 @@ public static class DependencyInjection
                 Database = database,
                 Username = username,
                 Password = password,
-                SslMode = Npgsql.SslMode.Require
+                SslMode = Npgsql.SslMode.Require,
+                Timeout = 30,
+                CommandTimeout = 30,
+                Pooling = true
             };
 
             return builder.ConnectionString;
