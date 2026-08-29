@@ -21,7 +21,7 @@ public class AsaasPaymentGateway : IPaymentGateway
     {
         try
         {
-            var cleanCpfCnpj = CleanDigits(customer.CpfCnpj);
+            var cleanCpfCnpj = CleanCpfCnpj(customer.CpfCnpj);
             var cleanPhone = CleanDigits(customer.Phone);
             var cleanPostalCode = CleanDigits(customer.PostalCode);
 
@@ -122,7 +122,7 @@ public class AsaasPaymentGateway : IPaymentGateway
                     {
                         name = request.CreditCardHolderInfo.Name,
                         email = request.CreditCardHolderInfo.Email,
-                        cpfCnpj = CleanDigits(request.CreditCardHolderInfo.CpfCnpj),
+                        cpfCnpj = CleanCpfCnpj(request.CreditCardHolderInfo.CpfCnpj),
                         postalCode = CleanDigits(request.CreditCardHolderInfo.PostalCode),
                         addressNumber = request.CreditCardHolderInfo.AddressNumber,
                         phone = CleanDigits(request.CreditCardHolderInfo.Phone)
@@ -286,6 +286,13 @@ public class AsaasPaymentGateway : IPaymentGateway
                 ErrorMessage = ex.Message
             };
         }
+    }
+
+    private static string? CleanCpfCnpj(string? input)
+    {
+        if (string.IsNullOrWhiteSpace(input)) return null;
+        var alphanumeric = new string(input.Where(char.IsLetterOrDigit).ToArray()).ToUpperInvariant();
+        return string.IsNullOrWhiteSpace(alphanumeric) ? null : alphanumeric;
     }
 
     private static string? CleanDigits(string? input)
