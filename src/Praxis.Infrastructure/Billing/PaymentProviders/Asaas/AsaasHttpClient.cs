@@ -24,6 +24,9 @@ public class AsaasHttpClient
         _httpClient.DefaultRequestHeaders.Accept.Clear();
         _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         
+        _httpClient.DefaultRequestHeaders.Remove("User-Agent");
+        _httpClient.DefaultRequestHeaders.Add("User-Agent", "PRAXIS-Nutri-Platform/1.0");
+
         if (!string.IsNullOrWhiteSpace(_options.ApiKey))
         {
             _httpClient.DefaultRequestHeaders.Remove("access_token");

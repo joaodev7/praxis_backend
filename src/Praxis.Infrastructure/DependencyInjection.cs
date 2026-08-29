@@ -89,7 +89,11 @@ public static class DependencyInjection
             if (!string.IsNullOrWhiteSpace(envEnvironment)) options.Environment = envEnvironment;
         });
 
-        services.AddHttpClient<Praxis.Infrastructure.Billing.PaymentProviders.Asaas.AsaasHttpClient>();
+        services.AddHttpClient<Praxis.Infrastructure.Billing.PaymentProviders.Asaas.AsaasHttpClient>(client =>
+        {
+            client.DefaultRequestHeaders.Remove("User-Agent");
+            client.DefaultRequestHeaders.Add("User-Agent", "PRAXIS-Nutri-Platform/1.0");
+        });
         services.AddScoped<Praxis.Application.Interfaces.IPaymentGateway, Praxis.Infrastructure.Billing.PaymentProviders.Asaas.AsaasPaymentGateway>();
         services.AddScoped<Praxis.Application.Interfaces.IAsaasWebhookService, Praxis.Infrastructure.Billing.PaymentProviders.Asaas.AsaasWebhookService>();
         services.AddHostedService<Praxis.Infrastructure.Billing.BackgroundJobs.BillingBackgroundService>();
