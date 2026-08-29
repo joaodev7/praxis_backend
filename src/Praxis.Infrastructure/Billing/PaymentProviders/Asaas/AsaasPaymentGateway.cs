@@ -125,7 +125,8 @@ public class AsaasPaymentGateway : IPaymentGateway
                         cpfCnpj = CleanCpfCnpj(request.CreditCardHolderInfo.CpfCnpj),
                         postalCode = CleanDigits(request.CreditCardHolderInfo.PostalCode),
                         addressNumber = request.CreditCardHolderInfo.AddressNumber,
-                        phone = CleanDigits(request.CreditCardHolderInfo.Phone)
+                        phone = CleanDigits(request.CreditCardHolderInfo.Phone),
+                        mobilePhone = CleanDigits(request.CreditCardHolderInfo.Phone)
                     } : null
                 };
             }
