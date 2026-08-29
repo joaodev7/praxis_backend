@@ -92,7 +92,20 @@ public class BillingService : IBillingService
         decimal amount = subscription?.CustomPrice ?? (request.BillingCycle == BillingCycle.Annual ? plan.AnnualPrice : plan.MonthlyPrice);
         var dueDate = DateTime.UtcNow.AddDays(3);
 
-        // 3. Create Subscription in Asaas
+        // 3. Prepare credit card holder info if needed
+        if (request.PaymentMethod == PaymentMethodType.CreditCard && request.CreditCardHolderInfo != null)
+        {
+            if (string.IsNullOrWhiteSpace(request.CreditCardHolderInfo.Email))
+                request.CreditCardHolderInfo.Email = tenant.Email;
+
+            if (string.IsNullOrWhiteSpace(request.CreditCardHolderInfo.CpfCnpj))
+                request.CreditCardHolderInfo.CpfCnpj = tenant.Cnpj;
+
+            if (string.IsNullOrWhiteSpace(request.CreditCardHolderInfo.Phone))
+                request.CreditCardHolderInfo.Phone = tenant.Phone;
+        }
+
+        // 4. Create Subscription in Asaas
         var gatewaySubResult = await _paymentGateway.CreateSubscriptionAsync(new CreateGatewaySubscriptionRequest
         {
             ProviderCustomerId = customerResult.ProviderCustomerId,
