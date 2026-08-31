@@ -82,7 +82,19 @@ public class AsaasWebhookService : IAsaasWebhookService
                 string? asaasPaymentId = paymentElement.TryGetProperty("id", out var pid) ? pid.GetString() : null;
                 string? asaasStatus = paymentElement.TryGetProperty("status", out var pstat) ? pstat.GetString() : null;
                 string? asaasSubscriptionId = paymentElement.TryGetProperty("subscription", out var psub) ? psub.GetString() : null;
+                string? asaasPaymentLinkId = paymentElement.TryGetProperty("paymentLink", out var plk) ? plk.GetString() : null;
+                string? asaasCustomerId = paymentElement.TryGetProperty("customer", out var pcus) ? pcus.GetString() : null;
+                string? asaasExternalReference = paymentElement.TryGetProperty("externalReference", out var pext) ? pext.GetString() : null;
+                string? asaasBillingType = paymentElement.TryGetProperty("billingType", out var pbtype) ? pbtype.GetString() : null;
+                string? asaasInvoiceUrl = paymentElement.TryGetProperty("invoiceUrl", out var pinv) ? pinv.GetString() : null;
                 decimal value = paymentElement.TryGetProperty("value", out var pval) ? pval.GetDecimal() : 0m;
+
+                var mappedMethod = asaasBillingType?.ToUpperInvariant() switch
+                {
+                    "CREDIT_CARD" => PaymentMethodType.CreditCard,
+                    "BOLETO" => PaymentMethodType.Boleto,
+                    _ => PaymentMethodType.Pix
+                };
 
                 if (!string.IsNullOrEmpty(asaasPaymentId))
                 {
@@ -96,6 +108,8 @@ public class AsaasWebhookService : IAsaasWebhookService
                     {
                         payment.Status = mappedStatus;
                         payment.UpdatedAt = DateTime.UtcNow;
+                        if (!string.IsNullOrEmpty(asaasInvoiceUrl)) payment.InvoiceUrl = asaasInvoiceUrl;
+                        if (!string.IsNullOrEmpty(asaasPaymentLinkId)) payment.ProviderPaymentLinkId = asaasPaymentLinkId;
 
                         if (mappedStatus == PaymentStatus.Confirmed)
                         {
@@ -123,11 +137,35 @@ public class AsaasWebhookService : IAsaasWebhookService
                             }
                         }
                     }
-                    else if (!string.IsNullOrEmpty(asaasSubscriptionId))
+                    else
                     {
-                        // Check if subscription exists by ProviderSubscriptionId
-                        var subscription = await _context.Subscriptions
-                            .FirstOrDefaultAsync(s => s.ProviderSubscriptionId == asaasSubscriptionId, ct);
+                        // Check if subscription exists by SubscriptionId, PaymentLinkId, CustomerId, or ExternalReference (TenantId)
+                        Subscription? subscription = null;
+
+                        if (!string.IsNullOrEmpty(asaasSubscriptionId))
+                        {
+                            subscription = await _context.Subscriptions
+                                .FirstOrDefaultAsync(s => s.ProviderSubscriptionId == asaasSubscriptionId, ct);
+                        }
+
+                        if (subscription == null && !string.IsNullOrEmpty(asaasPaymentLinkId))
+                        {
+                            subscription = await _context.Subscriptions
+                                .FirstOrDefaultAsync(s => s.ProviderPaymentLinkId == asaasPaymentLinkId, ct);
+                        }
+
+                        if (subscription == null && !string.IsNullOrEmpty(asaasCustomerId))
+                        {
+                            subscription = await _context.Subscriptions
+                                .OrderByDescending(s => s.CreatedAt)
+                                .FirstOrDefaultAsync(s => s.ProviderCustomerId == asaasCustomerId, ct);
+                        }
+
+                        if (subscription == null && Guid.TryParse(asaasExternalReference, out var tenantGuid))
+                        {
+                            subscription = await _context.Subscriptions
+                                .FirstOrDefaultAsync(s => s.TenantId == tenantGuid, ct);
+                        }
 
                         if (subscription != null)
                         {
@@ -136,10 +174,13 @@ public class AsaasWebhookService : IAsaasWebhookService
                                 TenantId = subscription.TenantId,
                                 SubscriptionId = subscription.Id,
                                 ProviderPaymentId = asaasPaymentId,
+                                ProviderPaymentLinkId = asaasPaymentLinkId,
                                 Amount = value,
                                 Status = mappedStatus,
                                 DueDate = DateTime.UtcNow,
+                                PaymentMethod = mappedMethod,
                                 Provider = "Asaas",
+                                InvoiceUrl = asaasInvoiceUrl,
                                 PaidAt = mappedStatus == PaymentStatus.Confirmed ? DateTime.UtcNow : null
                             };
 
@@ -152,6 +193,15 @@ public class AsaasWebhookService : IAsaasWebhookService
                                     : DateTime.UtcNow.AddMonths(1);
                                 subscription.GracePeriodEndsAt = null;
                                 subscription.UpdatedAt = DateTime.UtcNow;
+                            }
+                            else if (mappedStatus == PaymentStatus.Overdue)
+                            {
+                                if (subscription.Status != SubscriptionStatus.Suspended)
+                                {
+                                    subscription.Status = SubscriptionStatus.PastDue;
+                                    subscription.GracePeriodEndsAt = DateTime.UtcNow.AddDays(7);
+                                    subscription.UpdatedAt = DateTime.UtcNow;
+                                }
                             }
 
                             _context.Payments.Add(newPayment);

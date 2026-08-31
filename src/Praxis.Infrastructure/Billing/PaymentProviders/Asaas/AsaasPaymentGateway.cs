@@ -83,6 +83,58 @@ public class AsaasPaymentGateway : IPaymentGateway
         }
     }
 
+    public async Task<GatewayCheckoutResult> CreateCheckoutAsync(CreateGatewayCheckoutRequest request, CancellationToken ct = default)
+    {
+        try
+        {
+            var checkoutPayload = new
+            {
+                name = $"PRAXIS {request.PlanName}",
+                description = !string.IsNullOrWhiteSpace(request.PlanDescription) 
+                    ? request.PlanDescription 
+                    : $"Assinatura Plano PRAXIS {request.PlanName}",
+                billingType = "UNDEFINED", // Habilita PIX, Cartão de Crédito e Boleto no Checkout do Asaas
+                chargeType = "RECURRENT",
+                subscriptionCycle = request.BillingCycle == BillingCycle.Annual ? "YEARLY" : "MONTHLY",
+                value = request.Value,
+                dueDateLimitDays = 3,
+                notificationEnabled = true,
+                externalReference = request.ExternalReference,
+                callback = !string.IsNullOrWhiteSpace(request.SuccessUrl) ? new
+                {
+                    successUrl = request.SuccessUrl,
+                    autoRedirect = true
+                } : null
+            };
+
+            var (response, createError) = await _client.PostWithResultAsync<object, AsaasPaymentLinkResponse>("paymentLinks", checkoutPayload, ct);
+            if (response != null && !string.IsNullOrEmpty(response.Url))
+            {
+                return new GatewayCheckoutResult
+                {
+                    ProviderCheckoutId = response.Id,
+                    CheckoutUrl = response.Url,
+                    Success = true
+                };
+            }
+
+            return new GatewayCheckoutResult
+            {
+                Success = false,
+                ErrorMessage = createError ?? "Não foi possível gerar o link de checkout no gateway de pagamento."
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating payment link / checkout in Asaas for {Plan}", request.PlanName);
+            return new GatewayCheckoutResult
+            {
+                Success = false,
+                ErrorMessage = ex.Message
+            };
+        }
+    }
+
     public async Task<GatewaySubscriptionResult> CreateSubscriptionAsync(CreateGatewaySubscriptionRequest request, CancellationToken ct = default)
     {
         try
@@ -379,5 +431,26 @@ public class AsaasPaymentGateway : IPaymentGateway
 
         [JsonPropertyName("success")]
         public bool Success { get; set; }
+    }
+
+    private class AsaasPaymentLinkResponse
+    {
+        [JsonPropertyName("id")]
+        public string Id { get; set; } = string.Empty;
+
+        [JsonPropertyName("name")]
+        public string Name { get; set; } = string.Empty;
+
+        [JsonPropertyName("value")]
+        public decimal Value { get; set; }
+
+        [JsonPropertyName("active")]
+        public bool Active { get; set; }
+
+        [JsonPropertyName("chargeType")]
+        public string? ChargeType { get; set; }
+
+        [JsonPropertyName("url")]
+        public string Url { get; set; } = string.Empty;
     }
 }

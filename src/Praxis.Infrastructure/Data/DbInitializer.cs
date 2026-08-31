@@ -393,6 +393,10 @@ CREATE TABLE IF NOT EXISTS ""PaymentWebhookEvents"" (
     ""UpdatedAt"" timestamp with time zone
 );
 CREATE UNIQUE INDEX IF NOT EXISTS ""IX_PaymentWebhookEvents_Provider_ProviderEventId"" ON ""PaymentWebhookEvents"" (""Provider"", ""ProviderEventId"");
+
+ALTER TABLE ""Subscriptions"" ADD COLUMN IF NOT EXISTS ""ProviderPaymentLinkId"" text;
+ALTER TABLE ""Subscriptions"" ADD COLUMN IF NOT EXISTS ""ProviderCheckoutUrl"" text;
+ALTER TABLE ""Payments"" ADD COLUMN IF NOT EXISTS ""ProviderPaymentLinkId"" text;
 ";
                 await context.Database.ExecuteSqlRawAsync(sql);
             }

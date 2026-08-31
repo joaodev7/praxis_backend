@@ -25,6 +25,8 @@ public class Subscription : BaseEntity, ITenantEntity
     public string PaymentProvider { get; set; } = "Asaas";
     public string? ProviderCustomerId { get; set; }
     public string? ProviderSubscriptionId { get; set; }
+    public string? ProviderPaymentLinkId { get; set; }
+    public string? ProviderCheckoutUrl { get; set; }
 
     public decimal? CustomPrice { get; set; }
 

@@ -178,4 +178,47 @@ public class WebhookServiceTests : IDisposable
         var currentPeriodEnd = (await _context.Subscriptions.FirstAsync(s => s.Id == sub.Id)).CurrentPeriodEnd;
         currentPeriodEnd.Should().Be(originalPeriodEnd); // Period was not extended again
     }
+
+    [Fact]
+    public async Task ProcessWebhookAsync_CheckoutPaid_WithPaymentLink_ShouldCreatePaymentAndActivateSubscription()
+    {
+        // Arrange: Subscription with ProviderPaymentLinkId
+        var sub = await _context.Subscriptions.FirstAsync(s => s.TenantId == _tenantId);
+        sub.Status = SubscriptionStatus.Trial;
+        sub.ProviderPaymentLinkId = "plk_test_webhook_123";
+        await _context.SaveChangesAsync();
+
+        var payload = @"{
+            ""id"": ""evt_plk_conf_001"",
+            ""event"": ""PAYMENT_CONFIRMED"",
+            ""payment"": {
+                ""id"": ""pay_from_checkout_999"",
+                ""customer"": ""cus_checkout_123"",
+                ""paymentLink"": ""plk_test_webhook_123"",
+                ""billingType"": ""CREDIT_CARD"",
+                ""status"": ""CONFIRMED"",
+                ""value"": 299.00,
+                ""invoiceUrl"": ""https://sandbox.asaas.com/i/invoice999""
+            }
+        }";
+
+        // Act
+        var result = await _sut.ProcessWebhookAsync(WebhookToken, payload);
+
+        // Assert
+        result.Should().BeTrue();
+
+        var createdPayment = await _context.Payments.FirstOrDefaultAsync(p => p.ProviderPaymentId == "pay_from_checkout_999");
+        createdPayment.Should().NotBeNull();
+        createdPayment!.Status.Should().Be(PaymentStatus.Confirmed);
+        createdPayment.PaymentMethod.Should().Be(PaymentMethodType.CreditCard);
+        createdPayment.ProviderPaymentLinkId.Should().Be("plk_test_webhook_123");
+        createdPayment.InvoiceUrl.Should().Be("https://sandbox.asaas.com/i/invoice999");
+        createdPayment.PaidAt.Should().NotBeNull();
+
+        var updatedSub = await _context.Subscriptions.FirstAsync(s => s.Id == sub.Id);
+        updatedSub.Status.Should().Be(SubscriptionStatus.Active);
+        updatedSub.GracePeriodEndsAt.Should().BeNull();
+        updatedSub.CurrentPeriodEnd.Should().BeAfter(DateTime.UtcNow);
+    }
 }

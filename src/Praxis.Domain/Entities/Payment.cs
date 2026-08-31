@@ -12,6 +12,7 @@ public class Payment : BaseEntity, ITenantEntity
     public Subscription Subscription { get; set; } = null!;
 
     public string? ProviderPaymentId { get; set; } // Asaas payment ID
+    public string? ProviderPaymentLinkId { get; set; } // Asaas checkout / payment link ID
     public decimal Amount { get; set; }
     public PaymentStatus Status { get; set; } = PaymentStatus.Pending;
     public DateTime? DueDate { get; set; }

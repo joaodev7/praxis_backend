@@ -47,9 +47,11 @@ public class CheckoutRequestDto
 {
     public string PlanCode { get; set; } = "professional"; // "essential", "professional"
     public BillingCycle BillingCycle { get; set; } = BillingCycle.Monthly;
-    public PaymentMethodType PaymentMethod { get; set; } = PaymentMethodType.Pix;
+    public string? SuccessUrl { get; set; }
+    public string? CancelUrl { get; set; }
 
-    // Optional Credit Card Data (when payment method is credit card)
+    // Optional fields for backward compatibility
+    public PaymentMethodType? PaymentMethod { get; set; }
     public CreditCardHolderInfoDto? CreditCardHolderInfo { get; set; }
     public CreditCardDataDto? CreditCard { get; set; }
 }
@@ -75,14 +77,19 @@ public class CreditCardHolderInfoDto
 
 public class CheckoutResponseDto
 {
-    public Guid PaymentId { get; set; }
-    public PaymentStatus Status { get; set; }
+    public Guid? SubscriptionId { get; set; }
+    public string ProviderCheckoutId { get; set; } = string.Empty;
+    public string CheckoutUrl { get; set; } = string.Empty;
+    public string Status { get; set; } = "pending";
     public decimal Amount { get; set; }
-    public PaymentMethodType PaymentMethod { get; set; }
-    public DateTime? DueDate { get; set; }
+    public BillingCycle BillingCycle { get; set; }
+    public string Message { get; set; } = string.Empty;
+
+    // Optional legacy fields for backward compatibility
+    public Guid? PaymentId { get; set; }
+    public PaymentStatus? PaymentStatus { get; set; }
     public string? InvoiceUrl { get; set; }
     public PixPaymentDataDto? Pix { get; set; }
-    public string Message { get; set; } = string.Empty;
 }
 
 public class PixPaymentDataDto

@@ -21,6 +21,27 @@ public class GatewayCustomerResult
     public string? ErrorMessage { get; set; }
 }
 
+public class CreateGatewayCheckoutRequest
+{
+    public string CustomerId { get; set; } = string.Empty;
+    public string PlanName { get; set; } = string.Empty;
+    public string PlanDescription { get; set; } = string.Empty;
+    public decimal Value { get; set; }
+    public BillingCycle BillingCycle { get; set; }
+    public string SuccessUrl { get; set; } = string.Empty;
+    public string? CancelUrl { get; set; }
+    public string? ExpiredUrl { get; set; }
+    public string ExternalReference { get; set; } = string.Empty;
+}
+
+public class GatewayCheckoutResult
+{
+    public string ProviderCheckoutId { get; set; } = string.Empty;
+    public string CheckoutUrl { get; set; } = string.Empty;
+    public bool Success { get; set; }
+    public string? ErrorMessage { get; set; }
+}
+
 public class CreateGatewaySubscriptionRequest
 {
     public string ProviderCustomerId { get; set; } = string.Empty;

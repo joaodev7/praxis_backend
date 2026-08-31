@@ -88,50 +88,40 @@ public class BillingService : IBillingService
             throw new InvalidOperationException(customerResult.ErrorMessage ?? "Erro ao registrar cliente no gateway de pagamento.");
         }
 
-        // 2. Determine price and due date
+        // 2. Determine price
         decimal amount = subscription?.CustomPrice ?? (request.BillingCycle == BillingCycle.Annual ? plan.AnnualPrice : plan.MonthlyPrice);
-        var dueDate = DateTime.UtcNow.AddDays(3);
 
-        // 3. Prepare credit card holder info if needed
-        if (request.PaymentMethod == PaymentMethodType.CreditCard && request.CreditCardHolderInfo != null)
+        // 3. Determine Success URL
+        var successUrl = !string.IsNullOrWhiteSpace(request.SuccessUrl)
+            ? request.SuccessUrl
+            : "https://praxis-frontend.joaodbv.workers.dev/billing/success";
+
+        // 4. Create Hosted Checkout in Asaas
+        var checkoutResult = await _paymentGateway.CreateCheckoutAsync(new CreateGatewayCheckoutRequest
         {
-            if (string.IsNullOrWhiteSpace(request.CreditCardHolderInfo.Email))
-                request.CreditCardHolderInfo.Email = tenant.Email;
-
-            if (string.IsNullOrWhiteSpace(request.CreditCardHolderInfo.CpfCnpj))
-                request.CreditCardHolderInfo.CpfCnpj = tenant.Cnpj;
-
-            if (string.IsNullOrWhiteSpace(request.CreditCardHolderInfo.Phone))
-                request.CreditCardHolderInfo.Phone = tenant.Phone;
-        }
-
-        // 4. Create Subscription in Asaas
-        var gatewaySubResult = await _paymentGateway.CreateSubscriptionAsync(new CreateGatewaySubscriptionRequest
-        {
-            ProviderCustomerId = customerResult.ProviderCustomerId,
+            CustomerId = customerResult.ProviderCustomerId,
+            PlanName = plan.Name,
+            PlanDescription = $"Assinatura Plano PRAXIS {plan.Name} ({(request.BillingCycle == BillingCycle.Annual ? "Anual" : "Mensal")})",
             Value = amount,
-            NextDueDate = dueDate,
             BillingCycle = request.BillingCycle,
-            PaymentMethod = request.PaymentMethod,
-            Description = $"PRAXIS {plan.Name} ({request.BillingCycle})",
-            ExternalReference = tenant.Id.ToString(),
-            CreditCard = request.CreditCard,
-            CreditCardHolderInfo = request.CreditCardHolderInfo
+            SuccessUrl = successUrl,
+            CancelUrl = request.CancelUrl,
+            ExternalReference = tenant.Id.ToString()
         }, ct);
 
-        if (!gatewaySubResult.Success)
+        if (!checkoutResult.Success || string.IsNullOrEmpty(checkoutResult.CheckoutUrl))
         {
-            throw new InvalidOperationException(gatewaySubResult.ErrorMessage ?? "Falha ao gerar cobrança no gateway de pagamento.");
+            throw new InvalidOperationException(checkoutResult.ErrorMessage ?? "Falha ao gerar checkout no gateway de pagamento.");
         }
 
-        // 4. Update or Create local Subscription
+        // 5. Update or Create local Subscription
         if (subscription == null)
         {
             subscription = new Subscription
             {
                 TenantId = tenantId,
                 PlanId = plan.Id,
-                Status = SubscriptionStatus.Trial, // Remains Trial or becomes Active upon webhook confirmation
+                Status = SubscriptionStatus.Trial, // Remains Trial until payment confirmation via webhook
                 BillingCycle = request.BillingCycle,
                 StartedAt = DateTime.UtcNow,
                 TrialEndsAt = DateTime.UtcNow.AddDays(14),
@@ -139,7 +129,8 @@ public class BillingService : IBillingService
                 CurrentPeriodEnd = request.BillingCycle == BillingCycle.Annual ? DateTime.UtcNow.AddYears(1) : DateTime.UtcNow.AddMonths(1),
                 PaymentProvider = "Asaas",
                 ProviderCustomerId = customerResult.ProviderCustomerId,
-                ProviderSubscriptionId = gatewaySubResult.ProviderSubscriptionId
+                ProviderPaymentLinkId = checkoutResult.ProviderCheckoutId,
+                ProviderCheckoutUrl = checkoutResult.CheckoutUrl
             };
             _context.Subscriptions.Add(subscription);
         }
@@ -148,60 +139,23 @@ public class BillingService : IBillingService
             subscription.PlanId = plan.Id;
             subscription.BillingCycle = request.BillingCycle;
             subscription.ProviderCustomerId = customerResult.ProviderCustomerId;
-            subscription.ProviderSubscriptionId = gatewaySubResult.ProviderSubscriptionId;
+            subscription.ProviderPaymentLinkId = checkoutResult.ProviderCheckoutId;
+            subscription.ProviderCheckoutUrl = checkoutResult.CheckoutUrl;
             subscription.UpdatedAt = DateTime.UtcNow;
         }
 
-        // 5. Create Payment record
-        var payment = new Payment
-        {
-            TenantId = tenantId,
-            Subscription = subscription,
-            ProviderPaymentId = gatewaySubResult.ProviderPaymentId,
-            Amount = amount,
-            Status = gatewaySubResult.Status,
-            DueDate = dueDate,
-            PaymentMethod = request.PaymentMethod,
-            Provider = "Asaas",
-            InvoiceUrl = gatewaySubResult.InvoiceUrl,
-            CardBrand = request.CreditCard != null ? "Cartão de Crédito" : null,
-            CardLastFour = request.CreditCard?.Number?.Length >= 4 ? request.CreditCard.Number[^4..] : null
-        };
-
-        // 6. If Pix, fetch QR code and copy/paste string
-        PixPaymentDataDto? pixData = null;
-        if (request.PaymentMethod == PaymentMethodType.Pix && !string.IsNullOrEmpty(gatewaySubResult.ProviderPaymentId))
-        {
-            var pixResult = await _paymentGateway.GetPixQrCodeAsync(gatewaySubResult.ProviderPaymentId, ct);
-            if (pixResult != null && pixResult.Success)
-            {
-                payment.PixQrCodeUrl = pixResult.EncodedImage;
-                payment.PixCopyPasteCode = pixResult.Payload;
-
-                pixData = new PixPaymentDataDto
-                {
-                    QrCodeUrl = pixResult.EncodedImage,
-                    CopyPasteCode = pixResult.Payload,
-                    ExpirationDate = pixResult.ExpirationDate ?? dueDate
-                };
-            }
-        }
-
-        _context.Payments.Add(payment);
         await _context.SaveChangesAsync(ct);
 
         return new CheckoutResponseDto
         {
-            PaymentId = payment.Id,
-            Status = payment.Status,
-            Amount = payment.Amount,
-            PaymentMethod = payment.PaymentMethod,
-            DueDate = payment.DueDate,
-            InvoiceUrl = payment.InvoiceUrl,
-            Pix = pixData,
-            Message = payment.PaymentMethod == PaymentMethodType.CreditCard && payment.Status == PaymentStatus.Confirmed
-                ? "Pagamento via cartão aprovado com sucesso! Sua assinatura está ativa."
-                : "Cobrança gerada com sucesso. Realize o pagamento para ativar sua assinatura."
+            SubscriptionId = subscription.Id,
+            ProviderCheckoutId = checkoutResult.ProviderCheckoutId,
+            CheckoutUrl = checkoutResult.CheckoutUrl,
+            Status = "pending",
+            Amount = amount,
+            BillingCycle = request.BillingCycle,
+            InvoiceUrl = checkoutResult.CheckoutUrl,
+            Message = "Checkout gerado com sucesso. Redirecionando para o pagamento seguro..."
         };
     }
 

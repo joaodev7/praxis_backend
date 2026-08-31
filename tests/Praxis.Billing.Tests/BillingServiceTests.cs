@@ -53,12 +53,12 @@ public class BillingServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task CreateCheckoutAsync_Pix_ShouldCreateCustomer_CreateSubscription_AndReturnPixData()
+    public async Task CreateCheckoutAsync_Professional_Monthly_ShouldCreateCustomer_CreateCheckout_AndReturnCheckoutUrl()
     {
         // Arrange
         const string mockCustomerId = "cus_mock_12345";
-        const string mockSubscriptionId = "sub_mock_67890";
-        const string mockPaymentId = "pay_mock_11111";
+        const string mockCheckoutId = "plk_mock_67890";
+        const string mockCheckoutUrl = "https://sandbox.asaas.com/c/plk_mock_67890";
 
         _paymentGatewayMock.Setup(g => g.GetOrCreateCustomerAsync(It.IsAny<PaymentCustomer>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new GatewayCustomerResult
@@ -67,31 +67,18 @@ public class BillingServiceTests : IDisposable
                 Success = true
             });
 
-        _paymentGatewayMock.Setup(g => g.CreateSubscriptionAsync(It.IsAny<CreateGatewaySubscriptionRequest>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new GatewaySubscriptionResult
+        _paymentGatewayMock.Setup(g => g.CreateCheckoutAsync(It.IsAny<CreateGatewayCheckoutRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new GatewayCheckoutResult
             {
-                ProviderSubscriptionId = mockSubscriptionId,
-                ProviderPaymentId = mockPaymentId,
-                Status = PaymentStatus.Pending,
-                Value = 299.00m,
-                NextDueDate = DateTime.UtcNow.AddDays(3),
-                InvoiceUrl = "https://sandbox.asaas.com/i/11111",
-                Success = true
-            });
-
-        _paymentGatewayMock.Setup(g => g.GetPixQrCodeAsync(mockPaymentId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new GatewayPixQrCodeResult
-            {
-                EncodedImage = "iVBORw0KGgoAAAANSUhEUgAA...",
-                Payload = "00020126580014br.gov.bcb.pix...",
+                ProviderCheckoutId = mockCheckoutId,
+                CheckoutUrl = mockCheckoutUrl,
                 Success = true
             });
 
         var request = new CheckoutRequestDto
         {
             PlanCode = "professional",
-            BillingCycle = BillingCycle.Monthly,
-            PaymentMethod = PaymentMethodType.Pix
+            BillingCycle = BillingCycle.Monthly
         };
 
         // Act
@@ -99,22 +86,56 @@ public class BillingServiceTests : IDisposable
 
         // Assert
         result.Should().NotBeNull();
-        result.Status.Should().Be(PaymentStatus.Pending);
+        result.CheckoutUrl.Should().Be(mockCheckoutUrl);
+        result.ProviderCheckoutId.Should().Be(mockCheckoutId);
         result.Amount.Should().Be(299.00m);
-        result.Pix.Should().NotBeNull();
-        result.Pix!.QrCodeUrl.Should().Be("iVBORw0KGgoAAAANSUhEUgAA...");
-        result.Pix!.CopyPasteCode.Should().Be("00020126580014br.gov.bcb.pix...");
+        result.Status.Should().Be("pending");
 
         // Verify DB persistence
-        var payment = await _context.Payments.FirstOrDefaultAsync(p => p.ProviderPaymentId == mockPaymentId);
-        payment.Should().NotBeNull();
-        payment!.Amount.Should().Be(299.00m);
-        payment.PixCopyPasteCode.Should().Be("00020126580014br.gov.bcb.pix...");
-
         var sub = await _context.Subscriptions.FirstOrDefaultAsync(s => s.TenantId == _tenantId);
         sub.Should().NotBeNull();
         sub!.ProviderCustomerId.Should().Be(mockCustomerId);
-        sub.ProviderSubscriptionId.Should().Be(mockSubscriptionId);
+        sub.ProviderPaymentLinkId.Should().Be(mockCheckoutId);
+        sub.ProviderCheckoutUrl.Should().Be(mockCheckoutUrl);
+    }
+
+    [Fact]
+    public async Task CreateCheckoutAsync_Essential_Annual_ShouldCreateCheckoutWithAnnualPrice()
+    {
+        // Arrange
+        const string mockCustomerId = "cus_mock_annual_123";
+        const string mockCheckoutId = "plk_mock_annual_456";
+        const string mockCheckoutUrl = "https://sandbox.asaas.com/c/plk_mock_annual_456";
+
+        _paymentGatewayMock.Setup(g => g.GetOrCreateCustomerAsync(It.IsAny<PaymentCustomer>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new GatewayCustomerResult
+            {
+                ProviderCustomerId = mockCustomerId,
+                Success = true
+            });
+
+        _paymentGatewayMock.Setup(g => g.CreateCheckoutAsync(It.IsAny<CreateGatewayCheckoutRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new GatewayCheckoutResult
+            {
+                ProviderCheckoutId = mockCheckoutId,
+                CheckoutUrl = mockCheckoutUrl,
+                Success = true
+            });
+
+        var request = new CheckoutRequestDto
+        {
+            PlanCode = "essential",
+            BillingCycle = BillingCycle.Annual
+        };
+
+        // Act
+        var result = await _sut.CreateCheckoutAsync(request);
+
+        // Assert
+        result.Should().NotBeNull();
+        result.Amount.Should().Be(1490.00m); // 149 * 10 = 1490
+        result.CheckoutUrl.Should().Be(mockCheckoutUrl);
+        _paymentGatewayMock.Verify(g => g.CreateCheckoutAsync(It.Is<CreateGatewayCheckoutRequest>(r => r.Value == 1490.00m && r.BillingCycle == BillingCycle.Annual), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -129,21 +150,18 @@ public class BillingServiceTests : IDisposable
                 Success = true
             });
 
-        _paymentGatewayMock.Setup(g => g.CreateSubscriptionAsync(It.IsAny<CreateGatewaySubscriptionRequest>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new GatewaySubscriptionResult
+        _paymentGatewayMock.Setup(g => g.CreateCheckoutAsync(It.IsAny<CreateGatewayCheckoutRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new GatewayCheckoutResult
             {
-                ProviderSubscriptionId = "sub_999",
-                ProviderPaymentId = "pay_999",
-                Status = PaymentStatus.Pending,
-                Value = 149.00m,
+                ProviderCheckoutId = "plk_999",
+                CheckoutUrl = "https://sandbox.asaas.com/c/plk_999",
                 Success = true
             });
 
         var request = new CheckoutRequestDto
         {
             PlanCode = "essential",
-            BillingCycle = BillingCycle.Monthly,
-            PaymentMethod = PaymentMethodType.Pix
+            BillingCycle = BillingCycle.Monthly
         };
 
         // 1st checkout
