@@ -20,11 +20,9 @@ dotnet run
 
 A API estará disponível em:
 - Swagger UI: `http://localhost:5000` (ou porta informada no terminal)
-- Banco de dados inicializado automaticamente com dados de demonstração (Tenant: NutriVida Assessoria).
 
-### Credenciais de Teste Pré-configuradas:
-- **Admin**: `admin@nutrivida.com` / `Praxis@123`
-- **Nutricionista**: `carla.nutri@nutrivida.com` / `Praxis@123`
+### Cadastro de Empresas:
+- Crie novas contas de consultoria através do endpoint `POST /api/auth/register-tenant`.
 
 ## Execução via Docker Compose (com PostgreSQL)
 
