@@ -3,6 +3,7 @@ using Amazon.S3.Model;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using Praxis.Infrastructure.Storage;
+using System.Collections;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Security;
@@ -32,7 +33,7 @@ public class StorageDiagnosticController : ControllerBase
     }
 
     /// <summary>
-    /// Endpoint de diagnóstico profundo de infraestrutura (Runtime, DNS, TCP, TLS 1.2/1.3, SslStream, HttpClient, Proxy e AWS SDK).
+    /// Endpoint de diagnóstico profundo de infraestrutura (Runtime, OpenSSL CLI, OpenSSL Config, DNS, TCP, TLS 1.2/1.3, SslStream, HttpClient, Curl, Proxy e AWS SDK).
     /// </summary>
     [HttpGet("test")]
     public async Task<IActionResult> RunFullDiagnostic([FromQuery] string? objectKeyToCheck, CancellationToken cancellationToken)
@@ -58,7 +59,7 @@ public class StorageDiagnosticController : ControllerBase
             IsConfigured = _options.IsConfigured
         };
 
-        // 1. Runtime
+        // 1. Runtime & OS
         result.Runtime = new RuntimeInfo
         {
             DotNetVersion = Environment.Version.ToString(),
@@ -69,7 +70,13 @@ public class StorageDiagnosticController : ControllerBase
             OSVersion = Environment.OSVersion.ToString()
         };
 
-        // 2. Proxy detection (Booleans only, never values)
+        // 2. OpenSSL & OS Filesystem Inspection
+        result.OpenSslConfig = ReadOpenSslConfiguration();
+
+        // 3. Environment Variables Audit (Key names and presence only, NEVER secret values)
+        result.TlsEnvironmentVariables = AuditTlsEnvironmentVariables();
+
+        // 4. Proxy Detection (Booleans only)
         result.Proxy = new ProxyInfo
         {
             HttpProxyPresent = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("HTTP_PROXY")) ||
@@ -83,7 +90,14 @@ public class StorageDiagnosticController : ControllerBase
             DefaultProxyConfigured = HttpClient.DefaultProxy != null
         };
 
-        // 3. DNS Resolution
+        // 5. OpenSSL & Curl CLI Execution Tests
+        result.OpenSslVersionCli = await RunProcessAsync("openssl", "version -a", 5000);
+        result.OpenSslCiphersCli = await RunProcessAsync("openssl", "ciphers -v", 5000);
+        result.OpenSslSClientTls12 = await RunProcessAsync("openssl", $"s_client -servername {host} -connect {host}:443 -tls1_2", 7000);
+        result.OpenSslSClientBrief = await RunProcessAsync("openssl", $"s_client -brief -4 -connect {host}:443 -servername {host}", 7000);
+        result.CurlTest = await RunProcessAsync("curl", $"-4 -Iv https://{host}", 7000);
+
+        // 6. DNS Resolution
         var resolvedAddresses = new List<IPAddress>();
         try
         {
@@ -103,7 +117,7 @@ public class StorageDiagnosticController : ControllerBase
             result.DnsError = ex.Message;
         }
 
-        // 4. TCP Connectivity (Port 443 for each resolved IP)
+        // 7. TCP Connectivity (Port 443 for each resolved IP)
         foreach (var ipAddr in resolvedAddresses)
         {
             var sw = Stopwatch.StartNew();
@@ -138,16 +152,16 @@ public class StorageDiagnosticController : ControllerBase
             }
         }
 
-        // 5. TLS 1.2 Handshake Test via SslStream
+        // 8. TLS 1.2 Handshake Test via SslStream
         result.Tls12 = await TestTlsHandshakeAsync(host, SslProtocols.Tls12, null, cancellationToken);
 
-        // 6. TLS 1.3 Handshake Test via SslStream
+        // 9. TLS 1.3 Handshake Test via SslStream
         result.Tls13 = await TestTlsHandshakeAsync(host, SslProtocols.Tls13, null, cancellationToken);
 
-        // 7. HttpClient Simples (GET https://{host})
+        // 10. HttpClient Simples (GET https://{host})
         result.HttpClientTest = await TestHttpClientAsync(host, cancellationToken);
 
-        // 8. IPv4 Teste Separado (se houver IPv4)
+        // 11. IPv4 Teste Separado (se houver IPv4)
         var ipv4 = resolvedAddresses.FirstOrDefault(a => a.AddressFamily == AddressFamily.InterNetwork);
         if (ipv4 != null)
         {
@@ -155,7 +169,7 @@ public class StorageDiagnosticController : ControllerBase
             result.Ipv4HttpTest = await TestHttpClientSpecificIpAsync(host, ipv4, cancellationToken);
         }
 
-        // 9. IPv6 Teste Separado (se houver IPv6)
+        // 12. IPv6 Teste Separado (se houver IPv6)
         var ipv6 = resolvedAddresses.FirstOrDefault(a => a.AddressFamily == AddressFamily.InterNetworkV6);
         if (ipv6 != null)
         {
@@ -163,7 +177,7 @@ public class StorageDiagnosticController : ControllerBase
             result.Ipv6HttpTest = await TestHttpClientSpecificIpAsync(host, ipv6, cancellationToken);
         }
 
-        // 10. AWS SDK Direct PutObject & Full Exception Chain
+        // 13. AWS SDK Direct PutObject & Full Exception Chain
         if (_options.IsConfigured)
         {
             var testKey = $"system/diagnostic/backend-direct-test-{DateTime.UtcNow:yyyyMMdd-HHmmss}.txt";
@@ -200,7 +214,7 @@ public class StorageDiagnosticController : ControllerBase
             }
         }
 
-        // 11. Verificação de ObjectKey específico (se solicitado)
+        // 14. Verificação de ObjectKey específico (se solicitado)
         if (!string.IsNullOrWhiteSpace(objectKeyToCheck) && _options.IsConfigured)
         {
             try
@@ -245,6 +259,125 @@ public class StorageDiagnosticController : ControllerBase
         }
 
         return Ok(result);
+    }
+
+    private static async Task<ProcessExecResult> RunProcessAsync(string command, string arguments, int timeoutMs = 7000)
+    {
+        var res = new ProcessExecResult { Command = $"{command} {arguments}" };
+        try
+        {
+            using var process = new Process();
+            process.StartInfo = new ProcessStartInfo
+            {
+                FileName = command,
+                Arguments = arguments,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                RedirectStandardInput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            var outputBuilder = new StringBuilder();
+            var errorBuilder = new StringBuilder();
+
+            process.OutputDataReceived += (s, e) => { if (e.Data != null) outputBuilder.AppendLine(e.Data); };
+            process.ErrorDataReceived += (s, e) => { if (e.Data != null) errorBuilder.AppendLine(e.Data); };
+
+            process.Start();
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+
+            // Fechar stdin imediatamente para comandos interativos como s_client
+            try { process.StandardInput.Close(); } catch { }
+
+            using var cts = new CancellationTokenSource(timeoutMs);
+            await process.WaitForExitAsync(cts.Token);
+
+            res.Success = process.ExitCode == 0;
+            res.ExitCode = process.ExitCode;
+            res.Output = outputBuilder.ToString().Trim();
+            res.Error = errorBuilder.ToString().Trim();
+        }
+        catch (Exception ex)
+        {
+            res.Success = false;
+            res.ExecutionException = $"{ex.GetType().Name}: {ex.Message}";
+        }
+        return res;
+    }
+
+    private static OpenSslConfigInfo ReadOpenSslConfiguration()
+    {
+        var info = new OpenSslConfigInfo();
+
+        try
+        {
+            if (System.IO.File.Exists("/etc/os-release"))
+            {
+                info.OsRelease = System.IO.File.ReadAllText("/etc/os-release").Trim();
+            }
+
+            if (System.IO.File.Exists("/etc/ssl/openssl.cnf"))
+            {
+                var lines = System.IO.File.ReadAllLines("/etc/ssl/openssl.cnf");
+                var relevantLines = lines
+                    .Where(l => !string.IsNullOrWhiteSpace(l) && !l.TrimStart().StartsWith("#"))
+                    .Where(l => l.Contains("CipherString", StringComparison.OrdinalIgnoreCase) ||
+                                l.Contains("SECLEVEL", StringComparison.OrdinalIgnoreCase) ||
+                                l.Contains("MinProtocol", StringComparison.OrdinalIgnoreCase) ||
+                                l.Contains("MaxProtocol", StringComparison.OrdinalIgnoreCase) ||
+                                l.Contains("system_default", StringComparison.OrdinalIgnoreCase) ||
+                                l.Contains("ssl_conf", StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+
+                info.OpenSslCnfRelevantSettings = relevantLines;
+            }
+            else
+            {
+                info.OpenSslCnfRelevantSettings = new List<string> { "Arquivo /etc/ssl/openssl.cnf não encontrado." };
+            }
+        }
+        catch (Exception ex)
+        {
+            info.InspectionError = ex.Message;
+        }
+
+        return info;
+    }
+
+    private static List<EnvVarAuditEntry> AuditTlsEnvironmentVariables()
+    {
+        var entries = new List<EnvVarAuditEntry>();
+        var envVars = Environment.GetEnvironmentVariables();
+
+        var prefixes = new[] { "SSL", "TLS", "OPENSSL", "CURL", "HTTP", "HTTPS", "ALL", "NO", "DOTNET", "ASPNETCORE" };
+
+        foreach (DictionaryEntry de in envVars)
+        {
+            var key = de.Key?.ToString() ?? string.Empty;
+            var isMatch = prefixes.Any(p => key.StartsWith(p, StringComparison.OrdinalIgnoreCase));
+
+            if (isMatch)
+            {
+                var val = de.Value?.ToString() ?? string.Empty;
+                var isSecret = key.Contains("KEY", StringComparison.OrdinalIgnoreCase) ||
+                               key.Contains("SECRET", StringComparison.OrdinalIgnoreCase) ||
+                               key.Contains("TOKEN", StringComparison.OrdinalIgnoreCase) ||
+                               key.Contains("PASSWORD", StringComparison.OrdinalIgnoreCase) ||
+                               key.Contains("CONNECTION", StringComparison.OrdinalIgnoreCase);
+
+                entries.Add(new EnvVarAuditEntry
+                {
+                    Key = key,
+                    IsPresent = true,
+                    Length = val.Length,
+                    SafeValue = isSecret ? $"[PROTEGIDO - {val.Length} chars]" : (val.Length > 80 ? val[..80] + "..." : val)
+                });
+            }
+        }
+
+        return entries.OrderBy(e => e.Key).ToList();
     }
 
     private static async Task<TlsHandshakeResult> TestTlsHandshakeAsync(
@@ -310,9 +443,8 @@ public class StorageDiagnosticController : ControllerBase
 
         try
         {
-            // Requisição simples GET para testar se o handshake TLS completa
             var response = await httpClient.GetAsync($"https://{host}", cancellationToken);
-            result.Success = true; // Qualquer status HTTP retornado prova que o handshake TLS funcionou
+            result.Success = true;
             result.StatusCode = (int)response.StatusCode;
             result.ReasonPhrase = response.ReasonPhrase;
         }
@@ -395,7 +527,15 @@ public class DiagnosticResult
     public bool IsConfigured { get; set; }
 
     public RuntimeInfo? Runtime { get; set; }
+    public OpenSslConfigInfo? OpenSslConfig { get; set; }
+    public List<EnvVarAuditEntry> TlsEnvironmentVariables { get; set; } = new();
     public ProxyInfo? Proxy { get; set; }
+
+    public ProcessExecResult? OpenSslVersionCli { get; set; }
+    public ProcessExecResult? OpenSslCiphersCli { get; set; }
+    public ProcessExecResult? OpenSslSClientTls12 { get; set; }
+    public ProcessExecResult? OpenSslSClientBrief { get; set; }
+    public ProcessExecResult? CurlTest { get; set; }
 
     public List<DnsEntry> DnsResults { get; set; } = new();
     public string? DnsError { get; set; }
@@ -429,6 +569,31 @@ public class RuntimeInfo
     public string OSArchitecture { get; set; } = string.Empty;
     public string ProcessArchitecture { get; set; } = string.Empty;
     public string OSVersion { get; set; } = string.Empty;
+}
+
+public class OpenSslConfigInfo
+{
+    public string? OsRelease { get; set; }
+    public List<string> OpenSslCnfRelevantSettings { get; set; } = new();
+    public string? InspectionError { get; set; }
+}
+
+public class EnvVarAuditEntry
+{
+    public string Key { get; set; } = string.Empty;
+    public bool IsPresent { get; set; }
+    public int Length { get; set; }
+    public string SafeValue { get; set; } = string.Empty;
+}
+
+public class ProcessExecResult
+{
+    public string Command { get; set; } = string.Empty;
+    public bool Success { get; set; }
+    public int? ExitCode { get; set; }
+    public string? Output { get; set; }
+    public string? Error { get; set; }
+    public string? ExecutionException { get; set; }
 }
 
 public class ProxyInfo
