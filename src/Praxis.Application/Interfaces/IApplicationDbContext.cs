@@ -26,6 +26,7 @@ public interface IApplicationDbContext
     DbSet<SubscriptionFeatureOverride> SubscriptionFeatureOverrides { get; }
     DbSet<Payment> Payments { get; }
     DbSet<PaymentWebhookEvent> PaymentWebhookEvents { get; }
+    DbSet<StoredFile> Files { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

@@ -114,3 +114,19 @@ public enum PaymentMethodType
     CreditCard = 2,
     Boleto = 3
 }
+
+public enum FileCategory
+{
+    ClientPhoto = 1,
+    Report = 2,
+    Evidence = 3,
+    Document = 4,
+    Other = 5
+}
+
+public enum FileStatus
+{
+    Pending = 1,
+    Uploaded = 2,
+    Deleted = 3
+}

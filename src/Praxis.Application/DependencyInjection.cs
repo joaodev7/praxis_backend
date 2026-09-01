@@ -19,6 +19,7 @@ public static class DependencyInjection
         services.AddScoped<DashboardService>();
         services.AddScoped<Praxis.Application.Interfaces.IEntitlementService, EntitlementService>();
         services.AddScoped<Praxis.Application.Interfaces.IBillingService, BillingService>();
+        services.AddScoped<FileService>();
 
         return services;
     }

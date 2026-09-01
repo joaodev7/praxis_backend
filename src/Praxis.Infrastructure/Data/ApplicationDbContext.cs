@@ -38,12 +38,36 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
     public DbSet<SubscriptionFeatureOverride> SubscriptionFeatureOverrides => Set<SubscriptionFeatureOverride>();
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<PaymentWebhookEvent> PaymentWebhookEvents => Set<PaymentWebhookEvent>();
+    public DbSet<StoredFile> Files => Set<StoredFile>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
 
         // Configure indexes and relationships
+        modelBuilder.Entity<StoredFile>(entity =>
+        {
+            entity.HasIndex(f => f.ObjectKey);
+            entity.HasIndex(f => f.TenantId);
+            entity.HasIndex(f => f.ClientId);
+            entity.HasIndex(f => f.Status);
+
+            entity.HasOne(f => f.Tenant)
+                  .WithMany()
+                  .HasForeignKey(f => f.TenantId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(f => f.UploadedByUser)
+                  .WithMany()
+                  .HasForeignKey(f => f.UploadedByUserId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(f => f.Client)
+                  .WithMany()
+                  .HasForeignKey(f => f.ClientId)
+                  .OnDelete(DeleteBehavior.SetNull);
+        });
+
         modelBuilder.Entity<Plan>(entity =>
         {
             entity.HasIndex(p => p.Code).IsUnique();

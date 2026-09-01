@@ -71,7 +71,39 @@ public static class DependencyInjection
 
         services.AddScoped<IJwtTokenService, JwtTokenService>();
         services.AddScoped<IPdfReportService, PdfReportService>();
-        services.AddSingleton<IFileStorageService, FileStorageService>();
+
+        // Cloudflare R2 Storage Configuration
+        services.Configure<Praxis.Infrastructure.Storage.R2Options>(options =>
+        {
+            configuration.GetSection(Praxis.Infrastructure.Storage.R2Options.SectionName).Bind(options);
+
+            var accountId = configuration["R2__AccountId"] ?? configuration["R2:AccountId"] ?? configuration["R2_ACCOUNT_ID"];
+            if (!string.IsNullOrWhiteSpace(accountId)) options.AccountId = accountId;
+
+            var accessKey = configuration["R2__AccessKey"] ?? configuration["R2:AccessKey"] ?? configuration["R2_ACCESS_KEY"];
+            if (!string.IsNullOrWhiteSpace(accessKey)) options.AccessKey = accessKey;
+
+            var secretKey = configuration["R2__SecretKey"] ?? configuration["R2:SecretKey"] ?? configuration["R2_SECRET_KEY"];
+            if (!string.IsNullOrWhiteSpace(secretKey)) options.SecretKey = secretKey;
+
+            var bucketName = configuration["R2__BucketName"] ?? configuration["R2:BucketName"] ?? configuration["R2_BUCKET_NAME"];
+            if (!string.IsNullOrWhiteSpace(bucketName)) options.BucketName = bucketName;
+        });
+
+        services.AddSingleton<Amazon.S3.IAmazonS3>(sp =>
+        {
+            var options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<Praxis.Infrastructure.Storage.R2Options>>().Value;
+            var credentials = new Amazon.Runtime.BasicAWSCredentials(options.AccessKey, options.SecretKey);
+            var config = new Amazon.S3.AmazonS3Config
+            {
+                ServiceURL = options.ServiceUrl,
+                AuthenticationRegion = "auto",
+                ForcePathStyle = true
+            };
+            return new Amazon.S3.AmazonS3Client(credentials, config);
+        });
+
+        services.AddScoped<IFileStorageService, Praxis.Infrastructure.Storage.R2FileStorageService>();
 
         // Asaas Payment Provider Configuration
         services.Configure<Praxis.Infrastructure.Billing.PaymentProviders.Asaas.AsaasOptions>(options =>

@@ -208,6 +208,28 @@ CREATE TABLE IF NOT EXISTS ""PaymentWebhookEvents"" (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS ""IX_PaymentWebhookEvents_Provider_ProviderEventId"" ON ""PaymentWebhookEvents"" (""Provider"", ""ProviderEventId"");
 
+CREATE TABLE IF NOT EXISTS ""Files"" (
+    ""Id"" uuid NOT NULL PRIMARY KEY,
+    ""TenantId"" uuid NOT NULL REFERENCES ""Tenants"" (""Id"") ON DELETE RESTRICT,
+    ""UploadedByUserId"" uuid REFERENCES ""Users"" (""Id"") ON DELETE SET NULL,
+    ""ClientId"" uuid REFERENCES ""ClientCompanies"" (""Id"") ON DELETE SET NULL,
+    ""OriginalFileName"" text NOT NULL,
+    ""ObjectKey"" text NOT NULL,
+    ""ContentType"" text NOT NULL,
+    ""Size"" bigint NOT NULL,
+    ""Category"" integer NOT NULL,
+    ""Status"" integer NOT NULL,
+    ""UploadedAt"" timestamp with time zone,
+    ""IsDeleted"" boolean NOT NULL DEFAULT FALSE,
+    ""DeletedAt"" timestamp with time zone,
+    ""CreatedAt"" timestamp with time zone NOT NULL,
+    ""UpdatedAt"" timestamp with time zone
+);
+CREATE INDEX IF NOT EXISTS ""IX_Files_TenantId"" ON ""Files"" (""TenantId"");
+CREATE INDEX IF NOT EXISTS ""IX_Files_ClientId"" ON ""Files"" (""ClientId"");
+CREATE INDEX IF NOT EXISTS ""IX_Files_ObjectKey"" ON ""Files"" (""ObjectKey"");
+CREATE INDEX IF NOT EXISTS ""IX_Files_Status"" ON ""Files"" (""Status"");
+
 ALTER TABLE ""Subscriptions"" ADD COLUMN IF NOT EXISTS ""ProviderPaymentLinkId"" text;
 ALTER TABLE ""Subscriptions"" ADD COLUMN IF NOT EXISTS ""ProviderCheckoutUrl"" text;
 ALTER TABLE ""Payments"" ADD COLUMN IF NOT EXISTS ""ProviderPaymentLinkId"" text;
