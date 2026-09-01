@@ -33,20 +33,20 @@ public class StorageDiagnosticController : ControllerBase
     }
 
     /// <summary>
-    /// Endpoint de diagnóstico profundo de infraestrutura (Runtime, OpenSSL CLI, OpenSSL Config, DNS, TCP, TLS 1.2/1.3, SslStream, HttpClient, Curl, Proxy e AWS SDK).
+    /// Endpoint de diagnóstico comparativo de infraestrutura e TLS entre o endpoint específico da conta e o endpoint genérico do R2.
     /// </summary>
     [HttpGet("test")]
     public async Task<IActionResult> RunFullDiagnostic([FromQuery] string? objectKeyToCheck, CancellationToken cancellationToken)
     {
         var rawAccountId = _options.AccountId?.Trim() ?? string.Empty;
-        var host = !string.IsNullOrWhiteSpace(rawAccountId)
+        var accountHost = !string.IsNullOrWhiteSpace(rawAccountId)
             ? $"{rawAccountId}.r2.cloudflarestorage.com"
-            : "r2.cloudflarestorage.com";
+            : "3c73a89fae6057f74c8b82b6fd1813d1.r2.cloudflarestorage.com";
+        var genericHost = "r2.cloudflarestorage.com";
 
-        var result = new DiagnosticResult
+        var result = new ComparativeDiagnosticResult
         {
             Timestamp = DateTime.UtcNow,
-            TargetHost = host,
             BucketConfigured = _options.BucketName,
             ServiceUrlConfigured = _options.ServiceUrl,
             AccountIdPresent = !string.IsNullOrWhiteSpace(_options.AccountId),
@@ -90,94 +90,17 @@ public class StorageDiagnosticController : ControllerBase
             DefaultProxyConfigured = HttpClient.DefaultProxy != null
         };
 
-        // 5. OpenSSL & Curl CLI Execution Tests
+        // 5. OpenSSL CLI Version & Ciphers
         result.OpenSslVersionCli = await RunProcessAsync("openssl", "version -a", 5000);
         result.OpenSslCiphersCli = await RunProcessAsync("openssl", "ciphers -v", 5000);
-        result.OpenSslSClientTls12 = await RunProcessAsync("openssl", $"s_client -servername {host} -connect {host}:443 -tls1_2", 7000);
-        result.OpenSslSClientBrief = await RunProcessAsync("openssl", $"s_client -brief -4 -connect {host}:443 -servername {host}", 7000);
-        result.CurlTest = await RunProcessAsync("curl", $"-4 -Iv https://{host}", 7000);
 
-        // 6. DNS Resolution
-        var resolvedAddresses = new List<IPAddress>();
-        try
-        {
-            var addresses = await Dns.GetHostAddressesAsync(host, cancellationToken);
-            foreach (var addr in addresses)
-            {
-                resolvedAddresses.Add(addr);
-                result.DnsResults.Add(new DnsEntry
-                {
-                    Ip = addr.ToString(),
-                    AddressFamily = addr.AddressFamily == AddressFamily.InterNetwork ? "IPv4" : "IPv6"
-                });
-            }
-        }
-        catch (Exception ex)
-        {
-            result.DnsError = ex.Message;
-        }
+        // 6. TARGET 1: Endpoint Específico da Conta ({AccountId}.r2.cloudflarestorage.com)
+        result.Target1_AccountSpecific = await DiagnoseTargetAsync(accountHost, cancellationToken);
 
-        // 7. TCP Connectivity (Port 443 for each resolved IP)
-        foreach (var ipAddr in resolvedAddresses)
-        {
-            var sw = Stopwatch.StartNew();
-            using var tcpClient = new TcpClient(ipAddr.AddressFamily);
-            try
-            {
-                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cts.Token, cancellationToken);
-                await tcpClient.ConnectAsync(ipAddr, 443, linkedCts.Token);
-                sw.Stop();
+        // 7. TARGET 2: Endpoint Genérico (r2.cloudflarestorage.com)
+        result.Target2_GenericR2 = await DiagnoseTargetAsync(genericHost, cancellationToken);
 
-                result.TcpTests.Add(new TcpTestResult
-                {
-                    Ip = ipAddr.ToString(),
-                    AddressFamily = ipAddr.AddressFamily == AddressFamily.InterNetwork ? "IPv4" : "IPv6",
-                    Success = tcpClient.Connected,
-                    ElapsedMs = sw.ElapsedMilliseconds
-                });
-            }
-            catch (Exception ex)
-            {
-                sw.Stop();
-                result.TcpTests.Add(new TcpTestResult
-                {
-                    Ip = ipAddr.ToString(),
-                    AddressFamily = ipAddr.AddressFamily == AddressFamily.InterNetwork ? "IPv4" : "IPv6",
-                    Success = false,
-                    ElapsedMs = sw.ElapsedMilliseconds,
-                    ErrorType = ex.GetType().FullName,
-                    ErrorMessage = ex.Message
-                });
-            }
-        }
-
-        // 8. TLS 1.2 Handshake Test via SslStream
-        result.Tls12 = await TestTlsHandshakeAsync(host, SslProtocols.Tls12, null, cancellationToken);
-
-        // 9. TLS 1.3 Handshake Test via SslStream
-        result.Tls13 = await TestTlsHandshakeAsync(host, SslProtocols.Tls13, null, cancellationToken);
-
-        // 10. HttpClient Simples (GET https://{host})
-        result.HttpClientTest = await TestHttpClientAsync(host, cancellationToken);
-
-        // 11. IPv4 Teste Separado (se houver IPv4)
-        var ipv4 = resolvedAddresses.FirstOrDefault(a => a.AddressFamily == AddressFamily.InterNetwork);
-        if (ipv4 != null)
-        {
-            result.Ipv4Test = await TestTlsHandshakeAsync(host, SslProtocols.None, ipv4, cancellationToken);
-            result.Ipv4HttpTest = await TestHttpClientSpecificIpAsync(host, ipv4, cancellationToken);
-        }
-
-        // 12. IPv6 Teste Separado (se houver IPv6)
-        var ipv6 = resolvedAddresses.FirstOrDefault(a => a.AddressFamily == AddressFamily.InterNetworkV6);
-        if (ipv6 != null)
-        {
-            result.Ipv6Test = await TestTlsHandshakeAsync(host, SslProtocols.None, ipv6, cancellationToken);
-            result.Ipv6HttpTest = await TestHttpClientSpecificIpAsync(host, ipv6, cancellationToken);
-        }
-
-        // 13. AWS SDK Direct PutObject & Full Exception Chain
+        // 8. AWS SDK Direct PutObject & Full Exception Chain (apenas se configurado)
         if (_options.IsConfigured)
         {
             var testKey = $"system/diagnostic/backend-direct-test-{DateTime.UtcNow:yyyyMMdd-HHmmss}.txt";
@@ -214,7 +137,7 @@ public class StorageDiagnosticController : ControllerBase
             }
         }
 
-        // 14. Verificação de ObjectKey específico (se solicitado)
+        // 9. Verificação de ObjectKey específico (se solicitado)
         if (!string.IsNullOrWhiteSpace(objectKeyToCheck) && _options.IsConfigured)
         {
             try
@@ -259,6 +182,89 @@ public class StorageDiagnosticController : ControllerBase
         }
 
         return Ok(result);
+    }
+
+    private static async Task<TargetDiagnosticResult> DiagnoseTargetAsync(string host, CancellationToken cancellationToken)
+    {
+        var targetResult = new TargetDiagnosticResult { Host = host };
+
+        // 1. DNS
+        var resolvedAddresses = new List<IPAddress>();
+        try
+        {
+            var addresses = await Dns.GetHostAddressesAsync(host, cancellationToken);
+            foreach (var addr in addresses)
+            {
+                resolvedAddresses.Add(addr);
+                targetResult.DnsResults.Add(new DnsEntry
+                {
+                    Ip = addr.ToString(),
+                    AddressFamily = addr.AddressFamily == AddressFamily.InterNetwork ? "IPv4" : "IPv6"
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            targetResult.DnsError = ex.Message;
+        }
+
+        // 2. TCP 443 Connectivity para cada IP
+        foreach (var ipAddr in resolvedAddresses)
+        {
+            var sw = Stopwatch.StartNew();
+            using var tcpClient = new TcpClient(ipAddr.AddressFamily);
+            try
+            {
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cts.Token, cancellationToken);
+                await tcpClient.ConnectAsync(ipAddr, 443, linkedCts.Token);
+                sw.Stop();
+
+                targetResult.TcpTests.Add(new TcpTestResult
+                {
+                    Ip = ipAddr.ToString(),
+                    AddressFamily = ipAddr.AddressFamily == AddressFamily.InterNetwork ? "IPv4" : "IPv6",
+                    Success = tcpClient.Connected,
+                    ElapsedMs = sw.ElapsedMilliseconds
+                });
+            }
+            catch (Exception ex)
+            {
+                sw.Stop();
+                targetResult.TcpTests.Add(new TcpTestResult
+                {
+                    Ip = ipAddr.ToString(),
+                    AddressFamily = ipAddr.AddressFamily == AddressFamily.InterNetwork ? "IPv4" : "IPv6",
+                    Success = false,
+                    ElapsedMs = sw.ElapsedMilliseconds,
+                    ErrorType = ex.GetType().FullName,
+                    ErrorMessage = ex.Message
+                });
+            }
+        }
+
+        // 3. OpenSSL s_client TLS 1.2
+        targetResult.OpenSslSClientTls12 = await RunProcessAsync("openssl", $"s_client -servername {host} -connect {host}:443 -tls1_2", 7000);
+
+        // 4. OpenSSL s_client Default (TLS 1.3 / Auto)
+        targetResult.OpenSslSClientDefault = await RunProcessAsync("openssl", $"s_client -servername {host} -connect {host}:443", 7000);
+
+        // 5. OpenSSL s_client Brief IPv4
+        targetResult.OpenSslSClientBrief = await RunProcessAsync("openssl", $"s_client -brief -4 -connect {host}:443 -servername {host}", 7000);
+
+        // 6. Curl IPv4
+        targetResult.CurlTest = await RunProcessAsync("curl", $"-4 -Iv https://{host}", 7000);
+
+        // 7. Managed SslStream TLS 1.2
+        targetResult.ManagedTls12 = await TestTlsHandshakeAsync(host, SslProtocols.Tls12, null, cancellationToken);
+
+        // 8. Managed SslStream TLS 1.3
+        targetResult.ManagedTls13 = await TestTlsHandshakeAsync(host, SslProtocols.Tls13, null, cancellationToken);
+
+        // 9. HttpClient Simples (GET https://{host})
+        targetResult.HttpClientTest = await TestHttpClientAsync(host, cancellationToken);
+
+        return targetResult;
     }
 
     private static async Task<ProcessExecResult> RunProcessAsync(string command, string arguments, int timeoutMs = 7000)
@@ -461,41 +467,6 @@ public class StorageDiagnosticController : ControllerBase
         return result;
     }
 
-    private static async Task<HttpClientTestResult> TestHttpClientSpecificIpAsync(string host, IPAddress ip, CancellationToken cancellationToken)
-    {
-        var result = new HttpClientTestResult();
-        var handler = new SocketsHttpHandler
-        {
-            ConnectCallback = async (context, ct) =>
-            {
-                var socket = new Socket(ip.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
-                await socket.ConnectAsync(new IPEndPoint(ip, 443), ct);
-                return new NetworkStream(socket, ownsSocket: true);
-            }
-        };
-
-        using var httpClient = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(7) };
-
-        try
-        {
-            var response = await httpClient.GetAsync($"https://{host}", cancellationToken);
-            result.Success = true;
-            result.StatusCode = (int)response.StatusCode;
-            result.ReasonPhrase = response.ReasonPhrase;
-        }
-        catch (Exception ex)
-        {
-            result.Success = false;
-            result.ErrorType = ex.GetType().FullName;
-            result.ErrorMessage = ex.Message;
-            result.InnerExceptionType = ex.InnerException?.GetType().FullName;
-            result.InnerExceptionMessage = ex.InnerException?.Message;
-            result.ExceptionChain = GetExceptionChain(ex);
-        }
-
-        return result;
-    }
-
     private static List<ExceptionDetail> GetExceptionChain(Exception? ex)
     {
         var chain = new List<ExceptionDetail>();
@@ -513,10 +484,9 @@ public class StorageDiagnosticController : ControllerBase
     }
 }
 
-public class DiagnosticResult
+public class ComparativeDiagnosticResult
 {
     public DateTime Timestamp { get; set; }
-    public string TargetHost { get; set; } = string.Empty;
     public string BucketConfigured { get; set; } = string.Empty;
     public string ServiceUrlConfigured { get; set; } = string.Empty;
     public bool AccountIdPresent { get; set; }
@@ -533,25 +503,9 @@ public class DiagnosticResult
 
     public ProcessExecResult? OpenSslVersionCli { get; set; }
     public ProcessExecResult? OpenSslCiphersCli { get; set; }
-    public ProcessExecResult? OpenSslSClientTls12 { get; set; }
-    public ProcessExecResult? OpenSslSClientBrief { get; set; }
-    public ProcessExecResult? CurlTest { get; set; }
 
-    public List<DnsEntry> DnsResults { get; set; } = new();
-    public string? DnsError { get; set; }
-
-    public List<TcpTestResult> TcpTests { get; set; } = new();
-
-    public TlsHandshakeResult? Tls12 { get; set; }
-    public TlsHandshakeResult? Tls13 { get; set; }
-
-    public HttpClientTestResult? HttpClientTest { get; set; }
-
-    public TlsHandshakeResult? Ipv4Test { get; set; }
-    public HttpClientTestResult? Ipv4HttpTest { get; set; }
-
-    public TlsHandshakeResult? Ipv6Test { get; set; }
-    public HttpClientTestResult? Ipv6HttpTest { get; set; }
+    public TargetDiagnosticResult? Target1_AccountSpecific { get; set; }
+    public TargetDiagnosticResult? Target2_GenericR2 { get; set; }
 
     public bool AwsSdkPutSuccess { get; set; }
     public int? AwsSdkPutStatusCode { get; set; }
@@ -559,6 +513,25 @@ public class DiagnosticResult
     public List<ExceptionDetail>? AwsSdkPutExceptionChain { get; set; }
 
     public ObjectCheckResult? QueriedObjectResult { get; set; }
+}
+
+public class TargetDiagnosticResult
+{
+    public string Host { get; set; } = string.Empty;
+    public List<DnsEntry> DnsResults { get; set; } = new();
+    public string? DnsError { get; set; }
+
+    public List<TcpTestResult> TcpTests { get; set; } = new();
+
+    public ProcessExecResult? OpenSslSClientTls12 { get; set; }
+    public ProcessExecResult? OpenSslSClientDefault { get; set; }
+    public ProcessExecResult? OpenSslSClientBrief { get; set; }
+    public ProcessExecResult? CurlTest { get; set; }
+
+    public TlsHandshakeResult? ManagedTls12 { get; set; }
+    public TlsHandshakeResult? ManagedTls13 { get; set; }
+
+    public HttpClientTestResult? HttpClientTest { get; set; }
 }
 
 public class RuntimeInfo
