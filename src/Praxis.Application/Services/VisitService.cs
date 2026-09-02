@@ -219,13 +219,14 @@ public class VisitService
         {
             foreach (var checklistItem in visit.Checklist.Items.OrderBy(i => i.Order))
             {
-                visit.Items.Add(new VisitItem
+                var item = new VisitItem
                 {
                     VisitId = visit.Id,
                     ChecklistItemId = checklistItem.Id,
                     Result = EvaluationResult.Conforme,
                     Observation = null
-                });
+                };
+                _context.VisitItems.Add(item);
             }
         }
 
@@ -262,7 +263,7 @@ public class VisitService
                         Result = eval.Result,
                         Observation = eval.Observation
                     };
-                    visit.Items.Add(existingItem);
+                    _context.VisitItems.Add(existingItem);
                 }
                 else
                 {
