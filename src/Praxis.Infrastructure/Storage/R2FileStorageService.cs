@@ -136,7 +136,9 @@ public class R2FileStorageService : IFileStorageService
             BucketName = _options.BucketName,
             Key = uniqueKey,
             InputStream = fileStream,
-            ContentType = contentType
+            ContentType = contentType,
+            DisablePayloadSigning = true,
+            DisableDefaultChecksumValidation = true
         };
 
         await _s3Client.PutObjectAsync(request);
