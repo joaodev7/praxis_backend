@@ -104,12 +104,16 @@ public class NutritionistService
         {
             foreach (var unitId in request.AssignedUnitIds)
             {
-                _context.NutritionistUnitAssignments.Add(new NutritionistUnitAssignment
+                var unitExists = await _context.Units.AnyAsync(u => u.Id == unitId && !u.IsDeleted);
+                if (unitExists)
                 {
-                    TenantId = tenantId,
-                    NutritionistId = nutritionist.Id,
-                    UnitId = unitId
-                });
+                    _context.NutritionistUnitAssignments.Add(new NutritionistUnitAssignment
+                    {
+                        TenantId = tenantId,
+                        NutritionistId = nutritionist.Id,
+                        UnitId = unitId
+                    });
+                }
             }
         }
 
@@ -137,6 +141,15 @@ public class NutritionistService
             nutritionist.User.Name = request.Name;
             nutritionist.User.UpdatedAt = DateTime.UtcNow;
             nutritionist.User.Status = request.Status == CommonStatus.Active ? UserStatus.Active : UserStatus.Inactive;
+
+            if (!string.IsNullOrWhiteSpace(request.Email) && !nutritionist.User.Email.Equals(request.Email, StringComparison.OrdinalIgnoreCase))
+            {
+                var existingEmail = await _context.Users.AnyAsync(u => u.Email.ToLower() == request.Email.ToLower() && u.Id != nutritionist.UserId);
+                if (existingEmail)
+                    throw new InvalidOperationException("E-mail já está em uso por outro usuário.");
+
+                nutritionist.User.Email = request.Email.ToLower();
+            }
         }
 
         if (request.AssignedUnitIds != null)
@@ -147,12 +160,16 @@ public class NutritionistService
             // Add new assignments
             foreach (var unitId in request.AssignedUnitIds)
             {
-                _context.NutritionistUnitAssignments.Add(new NutritionistUnitAssignment
+                var unitExists = await _context.Units.AnyAsync(u => u.Id == unitId && !u.IsDeleted);
+                if (unitExists)
                 {
-                    TenantId = nutritionist.TenantId,
-                    NutritionistId = nutritionist.Id,
-                    UnitId = unitId
-                });
+                    _context.NutritionistUnitAssignments.Add(new NutritionistUnitAssignment
+                    {
+                        TenantId = nutritionist.TenantId,
+                        NutritionistId = nutritionist.Id,
+                        UnitId = unitId
+                    });
+                }
             }
         }
 
@@ -165,6 +182,7 @@ public class NutritionistService
     {
         var nutritionist = await _context.Nutritionists
             .Include(n => n.User)
+            .Include(n => n.UnitAssignments)
             .FirstOrDefaultAsync(n => n.Id == id && !n.IsDeleted);
 
         if (nutritionist == null) throw new KeyNotFoundException("Nutricionista não encontrado.");

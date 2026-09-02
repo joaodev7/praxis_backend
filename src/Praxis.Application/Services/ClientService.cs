@@ -119,12 +119,23 @@ public class ClientService
 
     public async Task DeleteAsync(Guid id)
     {
-        var client = await _context.ClientCompanies.FirstOrDefaultAsync(c => c.Id == id && !c.IsDeleted);
+        var client = await _context.ClientCompanies
+            .Include(c => c.Units)
+            .FirstOrDefaultAsync(c => c.Id == id && !c.IsDeleted);
+
         if (client == null) throw new KeyNotFoundException("Empresa cliente não encontrada.");
 
         client.IsDeleted = true;
         client.DeletedAt = DateTime.UtcNow;
         client.Status = CommonStatus.Inactive;
+
+        // Soft delete associated units as well
+        foreach (var unit in client.Units.Where(u => !u.IsDeleted))
+        {
+            unit.IsDeleted = true;
+            unit.DeletedAt = DateTime.UtcNow;
+            unit.Status = CommonStatus.Inactive;
+        }
 
         await _context.SaveChangesAsync();
     }

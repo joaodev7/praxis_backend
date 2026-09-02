@@ -23,6 +23,9 @@ public class UnitService
             .Include(u => u.ClientCompany)
             .Include(u => u.ARTs.Where(a => a.Status == ArtStatus.Active && !a.IsDeleted))
             .Include(u => u.Visits.Where(v => !v.IsDeleted))
+            .Include(u => u.NutritionistAssignments)
+                .ThenInclude(na => na.Nutritionist)
+                    .ThenInclude(n => n!.User)
             .Where(u => !u.IsDeleted);
 
         if (clientCompanyId.HasValue)
@@ -30,20 +33,7 @@ public class UnitService
 
         var units = await query.OrderBy(u => u.Name).ToListAsync();
 
-        return units.Select(u => new UnitDto(
-            u.Id,
-            u.ClientCompanyId,
-            u.ClientCompany?.TradeName ?? string.Empty,
-            u.Name,
-            u.Address,
-            u.Phone,
-            u.ResponsibleName,
-            u.Notes,
-            u.Status,
-            u.CreatedAt,
-            u.ARTs.FirstOrDefault()?.Number,
-            u.Visits.Count
-        )).ToList();
+        return units.Select(MapToDto).ToList();
     }
 
     public async Task<UnitDto> GetByIdAsync(Guid id)
@@ -52,24 +42,14 @@ public class UnitService
             .Include(u => u.ClientCompany)
             .Include(u => u.ARTs.Where(a => a.Status == ArtStatus.Active && !a.IsDeleted))
             .Include(u => u.Visits.Where(v => !v.IsDeleted))
+            .Include(u => u.NutritionistAssignments)
+                .ThenInclude(na => na.Nutritionist)
+                    .ThenInclude(n => n!.User)
             .FirstOrDefaultAsync(u => u.Id == id && !u.IsDeleted);
 
         if (u == null) throw new KeyNotFoundException("Unidade não encontrada.");
 
-        return new UnitDto(
-            u.Id,
-            u.ClientCompanyId,
-            u.ClientCompany?.TradeName ?? string.Empty,
-            u.Name,
-            u.Address,
-            u.Phone,
-            u.ResponsibleName,
-            u.Notes,
-            u.Status,
-            u.CreatedAt,
-            u.ARTs.FirstOrDefault()?.Number,
-            u.Visits.Count
-        );
+        return MapToDto(u);
     }
 
     public async Task<UnitDto> CreateAsync(CreateUnitRequest request)
@@ -117,7 +97,10 @@ public class UnitService
 
     public async Task DeleteAsync(Guid id)
     {
-        var unit = await _context.Units.FirstOrDefaultAsync(u => u.Id == id && !u.IsDeleted);
+        var unit = await _context.Units
+            .Include(u => u.NutritionistAssignments)
+            .FirstOrDefaultAsync(u => u.Id == id && !u.IsDeleted);
+
         if (unit == null) throw new KeyNotFoundException("Unidade não encontrada.");
 
         unit.IsDeleted = true;
@@ -125,5 +108,87 @@ public class UnitService
         unit.Status = CommonStatus.Inactive;
 
         await _context.SaveChangesAsync();
+    }
+
+    public async Task<UnitDto> AllocateNutritionistAsync(Guid unitId, Guid nutritionistId)
+    {
+        var tenantId = _currentUser.TenantId ?? throw new UnauthorizedAccessException("Tenant não identificado.");
+
+        var unit = await _context.Units
+            .Include(u => u.NutritionistAssignments)
+            .FirstOrDefaultAsync(u => u.Id == unitId && !u.IsDeleted);
+
+        if (unit == null) throw new KeyNotFoundException("Unidade não encontrada.");
+
+        var nutritionist = await _context.Nutritionists
+            .FirstOrDefaultAsync(n => n.Id == nutritionistId && !n.IsDeleted);
+
+        if (nutritionist == null) throw new KeyNotFoundException("Nutricionista não encontrado.");
+
+        var alreadyAssigned = unit.NutritionistAssignments.Any(na => na.NutritionistId == nutritionistId);
+        if (!alreadyAssigned)
+        {
+            _context.NutritionistUnitAssignments.Add(new NutritionistUnitAssignment
+            {
+                TenantId = tenantId,
+                UnitId = unitId,
+                NutritionistId = nutritionistId
+            });
+
+            await _context.SaveChangesAsync();
+        }
+
+        return await GetByIdAsync(unitId);
+    }
+
+    public async Task<UnitDto> DeallocateNutritionistAsync(Guid unitId, Guid nutritionistId)
+    {
+        var unit = await _context.Units
+            .FirstOrDefaultAsync(u => u.Id == unitId && !u.IsDeleted);
+
+        if (unit == null) throw new KeyNotFoundException("Unidade não encontrada.");
+
+        var assignment = await _context.NutritionistUnitAssignments
+            .FirstOrDefaultAsync(na => na.UnitId == unitId && na.NutritionistId == nutritionistId);
+
+        if (assignment == null)
+            throw new KeyNotFoundException("Vínculo entre o nutricionista e a unidade não encontrado.");
+
+        _context.NutritionistUnitAssignments.Remove(assignment);
+        await _context.SaveChangesAsync();
+
+        return await GetByIdAsync(unitId);
+    }
+
+    private static UnitDto MapToDto(Unit u)
+    {
+        var assignedNutritionists = u.NutritionistAssignments
+            .Where(na => na.Nutritionist != null && !na.Nutritionist.IsDeleted)
+            .Select(na => new AssignedNutritionistDto(
+                na.NutritionistId,
+                na.Nutritionist!.UserId,
+                na.Nutritionist.User?.Name ?? string.Empty,
+                na.Nutritionist.User?.Email ?? string.Empty,
+                na.Nutritionist.Crn,
+                na.Nutritionist.Phone,
+                na.Nutritionist.Status
+            ))
+            .ToList();
+
+        return new UnitDto(
+            u.Id,
+            u.ClientCompanyId,
+            u.ClientCompany?.TradeName ?? string.Empty,
+            u.Name,
+            u.Address,
+            u.Phone,
+            u.ResponsibleName,
+            u.Notes,
+            u.Status,
+            u.CreatedAt,
+            u.ARTs.FirstOrDefault()?.Number,
+            u.Visits.Count,
+            assignedNutritionists
+        );
     }
 }
