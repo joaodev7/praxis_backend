@@ -21,6 +21,8 @@ public class FileService
     private static readonly Dictionary<string, string[]> AllowedMimeTypes = new(StringComparer.OrdinalIgnoreCase)
     {
         { "image/jpeg", new[] { ".jpg", ".jpeg" } },
+        { "image/jpg", new[] { ".jpg", ".jpeg" } },
+        { "image/pjpeg", new[] { ".jpg", ".jpeg" } },
         { "image/png", new[] { ".png" } },
         { "image/webp", new[] { ".webp" } },
         { "application/pdf", new[] { ".pdf" } }
@@ -52,12 +54,34 @@ public class FileService
         if (string.IsNullOrWhiteSpace(sanitizedFileName))
             throw new ArgumentException("Nome do arquivo inválido.", nameof(request.FileName));
 
+        var cleanContentType = request.ContentType?.Trim().ToLowerInvariant() ?? string.Empty;
+        if (cleanContentType == "image/jpg" || cleanContentType == "image/pjpeg")
+        {
+            cleanContentType = "image/jpeg";
+        }
+
         var extension = Path.GetExtension(sanitizedFileName).ToLowerInvariant();
         if (string.IsNullOrWhiteSpace(extension))
-            throw new ArgumentException("O arquivo deve conter uma extensão válida (.jpg, .png, .webp, .pdf).", nameof(request.FileName));
+        {
+            extension = cleanContentType switch
+            {
+                "image/jpeg" => ".jpg",
+                "image/png" => ".png",
+                "image/webp" => ".webp",
+                "application/pdf" => ".pdf",
+                _ => string.Empty
+            };
+            if (!string.IsNullOrWhiteSpace(extension))
+            {
+                sanitizedFileName += extension;
+            }
+            else
+            {
+                throw new ArgumentException("O arquivo deve conter uma extensão válida (.jpg, .png, .webp, .pdf).", nameof(request.FileName));
+            }
+        }
 
         // 2. Validate MIME Type and Extension consistency
-        var cleanContentType = request.ContentType?.Trim().ToLowerInvariant() ?? string.Empty;
         if (!AllowedMimeTypes.TryGetValue(cleanContentType, out var allowedExtensions) || !allowedExtensions.Contains(extension))
         {
             throw new ArgumentException($"Tipo de arquivo não permitido ({cleanContentType} com extensão {extension}). Tipos aceitos: JPEG, PNG, WEBP e PDF.");
@@ -77,19 +101,30 @@ public class FileService
         }
 
         // 4. Validate Related Client (if provided)
-        if (request.ClientId.HasValue)
+        Guid? actualClientId = null;
+        if (request.ClientId.HasValue && request.ClientId.Value != Guid.Empty)
         {
             var clientExists = await _context.ClientCompanies
                 .AnyAsync(c => c.Id == request.ClientId.Value && !c.IsDeleted, cancellationToken);
 
-            if (!clientExists)
+            if (clientExists)
+            {
+                actualClientId = request.ClientId.Value;
+            }
+            else if (request.Category == FileCategory.ClientPhoto)
+            {
                 throw new KeyNotFoundException("Cliente especificado não foi encontrado ou não pertence a esta organização.");
+            }
+            else
+            {
+                _logger.LogWarning("ClientId {ClientId} fornecido para categoria {Category} não encontrado no tenant. Prosseguindo sem vínculo direto de cliente.", request.ClientId.Value, request.Category);
+            }
         }
 
         // 5. Generate secure, unique ObjectKey
         var year = DateTime.UtcNow.Year.ToString();
         var uniqueFileId = Guid.NewGuid();
-        var objectKey = BuildObjectKey(tenantId, request.ClientId, request.Category, year, uniqueFileId, extension);
+        var objectKey = BuildObjectKey(tenantId, actualClientId, request.Category, year, uniqueFileId, extension);
 
         // 6. Register Metadata in PostgreSQL
         var fileRecord = new StoredFile
@@ -97,7 +132,7 @@ public class FileService
             Id = uniqueFileId,
             TenantId = tenantId,
             UploadedByUserId = _currentUser.UserId,
-            ClientId = request.ClientId,
+            ClientId = actualClientId,
             OriginalFileName = sanitizedFileName,
             ObjectKey = objectKey,
             ContentType = cleanContentType,
