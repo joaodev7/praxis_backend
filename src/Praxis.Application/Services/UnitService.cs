@@ -26,6 +26,7 @@ public class UnitService
             .Include(u => u.NutritionistAssignments)
                 .ThenInclude(na => na.Nutritionist)
                     .ThenInclude(n => n!.User)
+            .AsSplitQuery()
             .Where(u => !u.IsDeleted);
 
         if (clientCompanyId.HasValue)
@@ -45,6 +46,7 @@ public class UnitService
             .Include(u => u.NutritionistAssignments)
                 .ThenInclude(na => na.Nutritionist)
                     .ThenInclude(n => n!.User)
+            .AsSplitQuery()
             .FirstOrDefaultAsync(u => u.Id == id && !u.IsDeleted);
 
         if (u == null) throw new KeyNotFoundException("Unidade não encontrada.");

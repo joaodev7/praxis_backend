@@ -30,7 +30,8 @@ public record UserDto(
     string Email,
     UserRole Role,
     UserStatus Status,
-    Guid? NutritionistId
+    Guid? NutritionistId,
+    string? ProfilePhotoUrl = null
 );
 
 public record ChangePasswordRequest(

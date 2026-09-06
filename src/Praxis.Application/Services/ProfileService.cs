@@ -163,9 +163,17 @@ public class ProfileService
         await _storage.UploadAsync(memoryStream, key, "image/webp", cancellationToken);
 
         var rawUrl = await _storage.GetFileUrlAsync(key, cancellationToken);
-        var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        var separator = rawUrl.Contains('?') ? "&" : "?";
-        var finalPhotoUrl = $"{rawUrl}{separator}v={timestamp}";
+        string finalPhotoUrl;
+        if (rawUrl.Contains("X-Amz-Signature", StringComparison.OrdinalIgnoreCase) || rawUrl.Contains("Signature=", StringComparison.OrdinalIgnoreCase))
+        {
+            finalPhotoUrl = rawUrl;
+        }
+        else
+        {
+            var separator = rawUrl.Contains('?') ? "&" : "?";
+            var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            finalPhotoUrl = $"{rawUrl}{separator}v={timestamp}";
+        }
 
         var oldKey = user.ProfilePhotoKey;
 
@@ -225,13 +233,33 @@ public class ProfileService
             var rawUrl = await _storage.GetFileUrlAsync(user.ProfilePhotoKey, cancellationToken);
             if (!string.IsNullOrWhiteSpace(rawUrl))
             {
+                if (rawUrl.Contains("X-Amz-Signature", StringComparison.OrdinalIgnoreCase) || rawUrl.Contains("Signature=", StringComparison.OrdinalIgnoreCase))
+                {
+                    return rawUrl;
+                }
+
                 var separator = rawUrl.Contains('?') ? "&" : "?";
                 var version = user.UpdatedAt?.Ticks ?? user.CreatedAt.Ticks;
                 return $"{rawUrl}{separator}v={version}";
             }
         }
 
-        return user.ProfilePhotoUrl;
+        if (!string.IsNullOrWhiteSpace(user.ProfilePhotoUrl))
+        {
+            var photoUrl = user.ProfilePhotoUrl;
+            if ((photoUrl.Contains("X-Amz-Signature", StringComparison.OrdinalIgnoreCase) || photoUrl.Contains("Signature=", StringComparison.OrdinalIgnoreCase))
+                && photoUrl.Contains("&v="))
+            {
+                var vIndex = photoUrl.LastIndexOf("&v=", StringComparison.OrdinalIgnoreCase);
+                if (vIndex > 0)
+                {
+                    photoUrl = photoUrl.Substring(0, vIndex);
+                }
+            }
+            return photoUrl;
+        }
+
+        return null;
     }
 
     private static bool IsValidImageHeader(byte[] header, int bytesRead, string contentType)

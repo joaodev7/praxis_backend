@@ -63,6 +63,7 @@ public class VisitsController : ControllerBase
     public async Task<IActionResult> DownloadReportPdf(Guid id)
     {
         var visit = await _context.Visits
+            .AsSplitQuery()
             .Include(v => v.Unit)
                 .ThenInclude(u => u!.ClientCompany)
             .Include(v => v.Nutritionist)

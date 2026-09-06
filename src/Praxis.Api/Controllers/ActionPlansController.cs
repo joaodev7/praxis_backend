@@ -8,6 +8,7 @@ namespace Praxis.Api.Controllers;
 
 [Authorize]
 [ApiController]
+[Route("api/action-plans")]
 [Route("api/[controller]")]
 public class ActionPlansController : ControllerBase
 {

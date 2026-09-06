@@ -26,6 +26,7 @@ public class NonConformityService
             .Include(nc => nc.Actions)
                 .ThenInclude(a => a.ResponsibleUser)
             .Include(nc => nc.Evidences)
+            .AsSplitQuery()
             .Where(nc => !nc.IsDeleted);
 
         if (status.HasValue)
@@ -88,6 +89,7 @@ public class NonConformityService
             .Include(nc => nc.Actions)
                 .ThenInclude(a => a.ResponsibleUser)
             .Include(nc => nc.Evidences)
+            .AsSplitQuery()
             .FirstOrDefaultAsync(nc => nc.Id == id && !nc.IsDeleted);
 
         if (nc == null) throw new KeyNotFoundException("Não conformidade não encontrada.");

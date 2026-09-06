@@ -131,7 +131,7 @@ public class AuthService
 
         return new LoginResponse(
             token,
-            new UserDto(user.Id, user.TenantId, user.Name, user.Email, user.Role, user.Status, user.NutritionistProfile?.Id),
+            new UserDto(user.Id, user.TenantId, user.Name, user.Email, user.Role, user.Status, user.NutritionistProfile?.Id, user.ProfilePhotoUrl),
             new TenantDto(user.Tenant.Id, user.Tenant.Name, user.Tenant.LegalName, user.Tenant.Cnpj, user.Tenant.Email, user.Tenant.Phone, user.Tenant.Status, user.Tenant.CreatedAt)
         );
     }
@@ -148,7 +148,7 @@ public class AuthService
         if (user == null)
             throw new KeyNotFoundException("Usuário não encontrado.");
 
-        return new UserDto(user.Id, user.TenantId, user.Name, user.Email, user.Role, user.Status, user.NutritionistProfile?.Id);
+        return new UserDto(user.Id, user.TenantId, user.Name, user.Email, user.Role, user.Status, user.NutritionistProfile?.Id, user.ProfilePhotoUrl);
     }
 
     public async Task<object> ExportUserDataAsync()

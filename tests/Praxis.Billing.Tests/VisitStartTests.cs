@@ -70,4 +70,32 @@ public class VisitStartTests
             }
         }
     }
+
+    [Fact]
+    public async Task CreateAsync_WhenPassingUserIdAsNutritionistId_ShouldResolveNutritionistAndSetNutritionistId()
+    {
+        var (context, currentUserMock, connection) = TestDbContextFactory.CreateInMemoryDbContext();
+        using (connection)
+        {
+            var entitlementServiceMock = new Mock<IEntitlementService>();
+            var clientService = new ClientService(context, currentUserMock.Object, entitlementServiceMock.Object);
+            var unitService = new UnitService(context, currentUserMock.Object);
+            var nutritionistService = new NutritionistService(context, currentUserMock.Object, entitlementServiceMock.Object);
+            var visitService = new VisitService(context, currentUserMock.Object);
+
+            var client = await clientService.CreateAsync(new CreateClientCompanyRequest("Cliente B", "Cliente B", "22.333.444/0001-88", "c@b.com", "119999", null, null, null));
+            var unit = await unitService.CreateAsync(new CreateUnitRequest(client.Id, "Unidade 2", "Rua 2", "119999", "Resp", null));
+            var nutri = await nutritionistService.CreateAsync(new CreateNutritionistRequest("Nutri 2", "n2@praxis.com", "Senha@123", "CRN-2", "119999", null));
+
+            // Act: Pass nutri.UserId instead of nutri.Id (simulating mobile behavior when sending user.id)
+            var visit = await visitService.CreateAsync(new CreateVisitRequest(unit.Id, nutri.UserId, null, DateTime.UtcNow, "Notes"));
+
+            // Assert: Visit is created and NutritionistId correctly points to the Nutritionist.Id
+            visit.Should().NotBeNull();
+            visit.NutritionistId.Should().Be(nutri.Id);
+
+            var visitInDb = await context.Visits.FindAsync(visit.Id);
+            visitInDb!.NutritionistId.Should().Be(nutri.Id);
+        }
+    }
 }

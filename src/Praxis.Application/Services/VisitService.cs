@@ -85,6 +85,7 @@ public class VisitService
                 .ThenInclude(nc => nc.Actions)
             .Include(v => v.NonConformities)
                 .ThenInclude(nc => nc.Evidences)
+            .AsSplitQuery()
             .FirstOrDefaultAsync(v => v.Id == id && !v.IsDeleted);
 
         if (v == null) throw new KeyNotFoundException("Visita técnica não encontrada.");
@@ -169,7 +170,21 @@ public class VisitService
         var unit = await _context.Units.FirstOrDefaultAsync(u => u.Id == request.UnitId && !u.IsDeleted);
         if (unit == null) throw new KeyNotFoundException("Unidade não encontrada.");
 
-        var nutritionist = await _context.Nutritionists.FirstOrDefaultAsync(n => n.Id == request.NutritionistId && !n.IsDeleted);
+        var nutritionist = await _context.Nutritionists
+            .FirstOrDefaultAsync(n => (n.Id == request.NutritionistId || n.UserId == request.NutritionistId) && !n.IsDeleted);
+
+        if (nutritionist == null && _currentUser.UserId.HasValue)
+        {
+            nutritionist = await _context.Nutritionists
+                .FirstOrDefaultAsync(n => n.UserId == _currentUser.UserId.Value && !n.IsDeleted);
+        }
+
+        if (nutritionist == null)
+        {
+            nutritionist = await _context.Nutritionists
+                .FirstOrDefaultAsync(n => !n.IsDeleted && n.Status == CommonStatus.Active);
+        }
+
         if (nutritionist == null) throw new KeyNotFoundException("Nutricionista não encontrado.");
 
         Guid? checklistId = request.ChecklistId;
@@ -183,7 +198,7 @@ public class VisitService
         {
             TenantId = tenantId,
             UnitId = request.UnitId,
-            NutritionistId = request.NutritionistId,
+            NutritionistId = nutritionist.Id,
             ChecklistId = checklistId,
             ScheduledAt = request.ScheduledAt,
             Status = VisitStatus.Scheduled,
@@ -239,6 +254,7 @@ public class VisitService
         var visit = await _context.Visits
             .Include(v => v.Items)
             .Include(v => v.NonConformities)
+            .AsSplitQuery()
             .FirstOrDefaultAsync(v => v.Id == id && !v.IsDeleted);
 
         if (visit == null) throw new KeyNotFoundException("Visita técnica não encontrada.");

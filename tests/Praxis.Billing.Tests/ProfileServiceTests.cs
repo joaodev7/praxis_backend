@@ -404,4 +404,64 @@ public class ProfileServiceTests
         var freshUserB = await context.Users.IgnoreQueryFilters().FirstAsync(u => u.Id == userB.Id);
         freshUserB.ProfilePhotoKey.Should().Be($"profiles/{tenantB}/other-user/avatar.webp");
     }
+
+    [Fact]
+    public async Task GetProfileAsync_WhenStorageReturnsPresignedUrl_ShouldPreserveExactPresignedUrlWithoutQueryParamMutation()
+    {
+        // Arrange
+        var tenantId = Guid.NewGuid();
+        var (context, currentUserMock, connection) = TestDbContextFactory.CreateInMemoryDbContext(tenantId);
+        using var conn = connection;
+
+        var user = context.Users.First();
+        user.ProfilePhotoKey = $"profiles/{tenantId}/{user.Id}/avatar.webp";
+        await context.SaveChangesAsync();
+
+        const string presignedUrl = "https://bucket.r2.cloudflarestorage.com/avatar.webp?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=test&X-Amz-Signature=abcd1234efgh";
+
+        _storageMock
+            .Setup(s => s.GetFileUrlAsync(user.ProfilePhotoKey, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(presignedUrl);
+
+        var service = new ProfileService(context, currentUserMock.Object, _storageMock.Object, _loggerMock.Object);
+
+        // Act
+        var result = await service.GetProfileAsync();
+
+        // Assert
+        result.ProfilePhotoUrl.Should().Be(presignedUrl);
+    }
+
+    [Fact]
+    public async Task UploadPhotoAsync_WhenStorageReturnsPresignedUrl_ShouldPreserveExactPresignedUrlWithoutQueryParamMutation()
+    {
+        // Arrange
+        var tenantId = Guid.NewGuid();
+        var (context, currentUserMock, connection) = TestDbContextFactory.CreateInMemoryDbContext(tenantId);
+        using var conn = connection;
+
+        var user = context.Users.First();
+        var expectedKey = $"profiles/{tenantId}/{user.Id}/avatar.webp";
+        const string presignedUrl = "https://bucket.r2.cloudflarestorage.com/avatar.webp?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=test&X-Amz-Signature=abcd1234efgh";
+
+        _storageMock
+            .Setup(s => s.UploadAsync(It.IsAny<Stream>(), expectedKey, "image/webp", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(expectedKey);
+
+        _storageMock
+            .Setup(s => s.GetFileUrlAsync(expectedKey, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(presignedUrl);
+
+        var service = new ProfileService(context, currentUserMock.Object, _storageMock.Object, _loggerMock.Object);
+
+        using var stream = new MemoryStream(ValidJpegBytes);
+
+        // Act
+        var response = await service.UploadPhotoAsync(stream, "avatar.jpg", "image/jpeg", ValidJpegBytes.Length);
+
+        // Assert
+        response.ProfilePhotoUrl.Should().Be(presignedUrl);
+        var updatedUser = await context.Users.FindAsync(user.Id);
+        updatedUser!.ProfilePhotoUrl.Should().Be(presignedUrl);
+    }
 }
