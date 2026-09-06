@@ -233,6 +233,43 @@ CREATE INDEX IF NOT EXISTS ""IX_Files_Status"" ON ""Files"" (""Status"");
 ALTER TABLE ""Subscriptions"" ADD COLUMN IF NOT EXISTS ""ProviderPaymentLinkId"" text;
 ALTER TABLE ""Subscriptions"" ADD COLUMN IF NOT EXISTS ""ProviderCheckoutUrl"" text;
 ALTER TABLE ""Payments"" ADD COLUMN IF NOT EXISTS ""ProviderPaymentLinkId"" text;
+ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""DateOfBirth"" date;
+ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""ProfilePhotoKey"" text;
+ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""ProfilePhotoUrl"" text;
+
+ALTER TABLE ""ActionItems"" ADD COLUMN IF NOT EXISTS ""TenantId"" uuid;
+ALTER TABLE ""ActionItems"" ADD COLUMN IF NOT EXISTS ""What"" text;
+ALTER TABLE ""ActionItems"" ADD COLUMN IF NOT EXISTS ""Why"" text;
+ALTER TABLE ""ActionItems"" ADD COLUMN IF NOT EXISTS ""ResponsibleName"" text;
+ALTER TABLE ""ActionItems"" ADD COLUMN IF NOT EXISTS ""Where"" text;
+ALTER TABLE ""ActionItems"" ADD COLUMN IF NOT EXISTS ""How"" text;
+ALTER TABLE ""ActionItems"" ADD COLUMN IF NOT EXISTS ""HowMuch"" numeric;
+ALTER TABLE ""ActionItems"" ADD COLUMN IF NOT EXISTS ""Priority"" integer NOT NULL DEFAULT 2;
+ALTER TABLE ""ActionItems"" ADD COLUMN IF NOT EXISTS ""StartedAt"" timestamp with time zone;
+ALTER TABLE ""ActionItems"" ADD COLUMN IF NOT EXISTS ""ValidatedAt"" timestamp with time zone;
+ALTER TABLE ""ActionItems"" ADD COLUMN IF NOT EXISTS ""ValidatedByUserId"" uuid;
+ALTER TABLE ""ActionItems"" ADD COLUMN IF NOT EXISTS ""ValidationComment"" text;
+ALTER TABLE ""ActionItems"" ADD COLUMN IF NOT EXISTS ""CancellationReason"" text;
+
+CREATE TABLE IF NOT EXISTS ""ActionPlanEvidences"" (
+    ""Id"" uuid NOT NULL PRIMARY KEY,
+    ""TenantId"" uuid NOT NULL REFERENCES ""Tenants"" (""Id"") ON DELETE RESTRICT,
+    ""ActionPlanId"" uuid NOT NULL REFERENCES ""ActionItems"" (""Id"") ON DELETE CASCADE,
+    ""FileUrl"" text NOT NULL,
+    ""ObjectKey"" text NOT NULL,
+    ""FileName"" text NOT NULL,
+    ""ContentType"" text NOT NULL,
+    ""FileSize"" bigint NOT NULL,
+    ""UploadedAt"" timestamp with time zone NOT NULL,
+    ""UploadedByUserId"" uuid REFERENCES ""Users"" (""Id"") ON DELETE SET NULL,
+    ""IsDeleted"" boolean NOT NULL DEFAULT FALSE,
+    ""DeletedAt"" timestamp with time zone,
+    ""CreatedAt"" timestamp with time zone NOT NULL,
+    ""UpdatedAt"" timestamp with time zone
+);
+CREATE INDEX IF NOT EXISTS ""IX_ActionPlanEvidences_ActionPlanId"" ON ""ActionPlanEvidences"" (""ActionPlanId"");
+CREATE INDEX IF NOT EXISTS ""IX_ActionPlanEvidences_TenantId"" ON ""ActionPlanEvidences"" (""TenantId"");
+CREATE INDEX IF NOT EXISTS ""IX_ActionPlanEvidences_ObjectKey"" ON ""ActionPlanEvidences"" (""ObjectKey"");
 ";
                 await context.Database.ExecuteSqlRawAsync(sql);
             }

@@ -307,6 +307,27 @@ public class VisitService
                         }
                     }
 
+                    if (eval.NonConformity.ActionPlan != null)
+                    {
+                        var ap = eval.NonConformity.ActionPlan;
+                        nc.Actions.Add(new ActionItem
+                        {
+                            TenantId = visit.TenantId,
+                            NonConformityId = nc.Id,
+                            What = !string.IsNullOrWhiteSpace(ap.What) ? ap.What.Trim() : (!string.IsNullOrWhiteSpace(nc.CorrectiveAction) ? nc.CorrectiveAction : nc.Description),
+                            Why = ap.Why?.Trim(),
+                            ResponsibleUserId = ap.ResponsibleUserId,
+                            ResponsibleName = ap.ResponsibleName?.Trim(),
+                            DueDate = ap.DueDate != default ? ap.DueDate : (nc.DueDate ?? DateTime.UtcNow.AddDays(7)),
+                            Where = ap.Where?.Trim(),
+                            How = ap.How?.Trim(),
+                            HowMuch = ap.HowMuch,
+                            Priority = ap.Priority,
+                            Status = ActionItemStatus.Pendente,
+                            Notes = ap.Notes?.Trim()
+                        });
+                    }
+
                     _context.NonConformities.Add(nc);
                 }
             }

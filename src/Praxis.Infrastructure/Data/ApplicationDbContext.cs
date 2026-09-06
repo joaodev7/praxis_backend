@@ -39,6 +39,7 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<PaymentWebhookEvent> PaymentWebhookEvents => Set<PaymentWebhookEvent>();
     public DbSet<StoredFile> Files => Set<StoredFile>();
+    public DbSet<ActionPlanEvidence> ActionPlanEvidences => Set<ActionPlanEvidence>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -114,6 +115,9 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
         modelBuilder.Entity<User>(entity =>
         {
             entity.HasIndex(u => u.Email).IsUnique();
+            entity.Property(u => u.Name).HasMaxLength(150).IsRequired();
+            entity.Property(u => u.ProfilePhotoKey).HasMaxLength(500);
+            entity.Property(u => u.ProfilePhotoUrl).HasMaxLength(1000);
             entity.HasOne(u => u.Tenant)
                   .WithMany(t => t.Users)
                   .HasForeignKey(u => u.TenantId)
@@ -178,6 +182,58 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
                   .WithOne(vi => vi.NonConformity)
                   .HasForeignKey<NonConformity>(nc => nc.VisitItemId)
                   .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<ActionItem>(entity =>
+        {
+            entity.HasOne(a => a.NonConformity)
+                  .WithMany(nc => nc.Actions)
+                  .HasForeignKey(a => a.NonConformityId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(a => a.ResponsibleUser)
+                  .WithMany()
+                  .HasForeignKey(a => a.ResponsibleUserId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(a => a.ValidatedByUser)
+                  .WithMany()
+                  .HasForeignKey(a => a.ValidatedByUserId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(a => a.Tenant)
+                  .WithMany()
+                  .HasForeignKey(a => a.TenantId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(a => a.NonConformityId);
+            entity.HasIndex(a => a.TenantId);
+            entity.HasIndex(a => a.ResponsibleUserId);
+            entity.HasIndex(a => a.Status);
+            entity.HasIndex(a => a.Priority);
+            entity.HasIndex(a => a.DueDate);
+        });
+
+        modelBuilder.Entity<ActionPlanEvidence>(entity =>
+        {
+            entity.HasOne(e => e.ActionPlan)
+                  .WithMany(a => a.Evidences)
+                  .HasForeignKey(e => e.ActionPlanId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Tenant)
+                  .WithMany()
+                  .HasForeignKey(e => e.TenantId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(e => e.UploadedByUser)
+                  .WithMany()
+                  .HasForeignKey(e => e.UploadedByUserId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(e => e.ActionPlanId);
+            entity.HasIndex(e => e.TenantId);
+            entity.HasIndex(e => e.ObjectKey);
         });
 
         // Apply Multi-tenancy & Soft Delete Query Filters to all relevant entities

@@ -27,6 +27,7 @@ public interface IApplicationDbContext
     DbSet<Payment> Payments { get; }
     DbSet<PaymentWebhookEvent> PaymentWebhookEvents { get; }
     DbSet<StoredFile> Files { get; }
+    DbSet<ActionPlanEvidence> ActionPlanEvidences { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

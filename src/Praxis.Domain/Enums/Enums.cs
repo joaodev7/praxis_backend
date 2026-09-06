@@ -71,8 +71,17 @@ public enum ActionItemStatus
 {
     Pendente = 1,
     EmAndamento = 2,
-    Concluida = 3,
-    Cancelada = 4
+    AguardandoValidacao = 3,
+    Concluida = 4,
+    Cancelada = 5
+}
+
+public enum ActionPlanPriority
+{
+    Baixa = 1,
+    Media = 2,
+    Alta = 3,
+    Critica = 4
 }
 
 public enum EvidenceType

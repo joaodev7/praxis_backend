@@ -20,6 +20,9 @@ public static class DependencyInjection
         services.AddScoped<Praxis.Application.Interfaces.IEntitlementService, EntitlementService>();
         services.AddScoped<Praxis.Application.Interfaces.IBillingService, BillingService>();
         services.AddScoped<FileService>();
+        services.AddScoped<ProfileService>();
+        services.AddScoped<Praxis.Application.Interfaces.IActionPlanService, ActionPlanService>();
+        services.AddScoped<ActionPlanService>();
 
         return services;
     }

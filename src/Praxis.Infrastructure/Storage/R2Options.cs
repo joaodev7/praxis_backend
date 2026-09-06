@@ -8,6 +8,7 @@ public class R2Options
     public string AccessKey { get; set; } = string.Empty;
     public string SecretKey { get; set; } = string.Empty;
     public string BucketName { get; set; } = "file-praxis-sandbox";
+    public string PublicUrl { get; set; } = string.Empty;
 
     public int UploadUrlExpirationMinutes { get; set; } = 15;
     public int DownloadUrlExpirationMinutes { get; set; } = 15;

@@ -169,4 +169,42 @@ public class R2FileStorageService : IFileStorageService
             return null;
         }
     }
+
+    public async Task<string> UploadAsync(
+        Stream stream,
+        string key,
+        string contentType,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+            throw new ArgumentException("Key não pode ser vazia.", nameof(key));
+
+        var request = new PutObjectRequest
+        {
+            BucketName = _options.BucketName,
+            Key = key,
+            InputStream = stream,
+            ContentType = contentType,
+            DisablePayloadSigning = true,
+            DisableDefaultChecksumValidation = true
+        };
+
+        await _s3Client.PutObjectAsync(request, cancellationToken);
+        _logger.LogInformation("Objeto enviado com sucesso para o R2: {ObjectKey}", key);
+        return key;
+    }
+
+    public async Task<string> GetFileUrlAsync(string objectKey, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(objectKey))
+            return string.Empty;
+
+        if (!string.IsNullOrWhiteSpace(_options.PublicUrl))
+        {
+            var cleanPublicUrl = _options.PublicUrl.TrimEnd('/');
+            return $"{cleanPublicUrl}/{objectKey}";
+        }
+
+        return await GenerateDownloadUrlAsync(objectKey, TimeSpan.FromDays(7), cancellationToken);
+    }
 }

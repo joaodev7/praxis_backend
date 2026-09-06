@@ -88,6 +88,9 @@ public static class DependencyInjection
 
             var bucketName = configuration["R2__BucketName"] ?? configuration["R2:BucketName"] ?? configuration["R2_BUCKET_NAME"];
             if (!string.IsNullOrWhiteSpace(bucketName)) options.BucketName = bucketName;
+
+            var publicUrl = configuration["R2__PublicUrl"] ?? configuration["R2:PublicUrl"] ?? configuration["R2_PUBLIC_URL"];
+            if (!string.IsNullOrWhiteSpace(publicUrl)) options.PublicUrl = publicUrl;
         });
 
         services.AddSingleton<Amazon.S3.IAmazonS3>(sp =>

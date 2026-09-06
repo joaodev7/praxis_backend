@@ -38,7 +38,8 @@ public record CreateNonConformityRequest(
     NonConformitySeverity Severity,
     DateTime? DueDate,
     string? CorrectiveAction,
-    List<string>? InitialEvidenceUrls
+    List<string>? InitialEvidenceUrls,
+    CreateActionPlanRequest? ActionPlan = null
 );
 
 public record UpdateNonConformityRequest(
