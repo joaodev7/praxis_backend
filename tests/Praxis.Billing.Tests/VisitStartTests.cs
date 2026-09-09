@@ -98,4 +98,55 @@ public class VisitStartTests
             visitInDb!.NutritionistId.Should().Be(nutri.Id);
         }
     }
+
+    [Fact]
+    public async Task CancelVisitAsync_ShouldChangeStatusToCancelled()
+    {
+        var (context, currentUserMock, connection) = TestDbContextFactory.CreateInMemoryDbContext();
+        using (connection)
+        {
+            var entitlementServiceMock = new Mock<IEntitlementService>();
+            var clientService = new ClientService(context, currentUserMock.Object, entitlementServiceMock.Object);
+            var unitService = new UnitService(context, currentUserMock.Object);
+            var nutritionistService = new NutritionistService(context, currentUserMock.Object, entitlementServiceMock.Object);
+            var visitService = new VisitService(context, currentUserMock.Object);
+
+            var client = await clientService.CreateAsync(new CreateClientCompanyRequest("Cliente C", "Cliente C", "33.444.555/0001-77", "c@c.com", "119999", null, null, null));
+            var unit = await unitService.CreateAsync(new CreateUnitRequest(client.Id, "Unidade 3", "Rua 3", "119999", "Resp", null));
+            var nutri = await nutritionistService.CreateAsync(new CreateNutritionistRequest("Nutri 3", "n3@praxis.com", "Senha@123", "CRN-3", "119999", null));
+
+            var visit = await visitService.CreateAsync(new CreateVisitRequest(unit.Id, nutri.Id, null, DateTime.UtcNow, "Notes"));
+            visit.Status.Should().Be(VisitStatus.Scheduled);
+
+            var cancelled = await visitService.CancelVisitAsync(visit.Id, "Cliente solicitou reagendamento");
+            cancelled.Status.Should().Be(VisitStatus.Cancelled);
+            cancelled.Notes.Should().Contain("Cliente solicitou reagendamento");
+        }
+    }
+
+    [Fact]
+    public async Task DeleteAsync_ShouldSoftDeleteVisit()
+    {
+        var (context, currentUserMock, connection) = TestDbContextFactory.CreateInMemoryDbContext();
+        using (connection)
+        {
+            var entitlementServiceMock = new Mock<IEntitlementService>();
+            var clientService = new ClientService(context, currentUserMock.Object, entitlementServiceMock.Object);
+            var unitService = new UnitService(context, currentUserMock.Object);
+            var nutritionistService = new NutritionistService(context, currentUserMock.Object, entitlementServiceMock.Object);
+            var visitService = new VisitService(context, currentUserMock.Object);
+
+            var client = await clientService.CreateAsync(new CreateClientCompanyRequest("Cliente D", "Cliente D", "44.555.666/0001-66", "c@d.com", "119999", null, null, null));
+            var unit = await unitService.CreateAsync(new CreateUnitRequest(client.Id, "Unidade 4", "Rua 4", "119999", "Resp", null));
+            var nutri = await nutritionistService.CreateAsync(new CreateNutritionistRequest("Nutri 4", "n4@praxis.com", "Senha@123", "CRN-4", "119999", null));
+
+            var visit = await visitService.CreateAsync(new CreateVisitRequest(unit.Id, nutri.Id, null, DateTime.UtcNow, "Notes"));
+
+            await visitService.DeleteAsync(visit.Id);
+
+            var inDb = await context.Visits.IgnoreQueryFilters().FirstOrDefaultAsync(v => v.Id == visit.Id);
+            inDb!.IsDeleted.Should().BeTrue();
+            inDb.DeletedAt.Should().NotBeNull();
+        }
+    }
 }

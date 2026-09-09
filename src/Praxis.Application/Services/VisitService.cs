@@ -43,8 +43,9 @@ public class VisitService
         {
             var conforming = v.Items.Count(i => i.Result == EvaluationResult.Conforme);
             var nonConforming = v.Items.Count(i => i.Result == EvaluationResult.NaoConforme);
-            var evaluated = conforming + nonConforming;
-            double? compliance = evaluated > 0 ? Math.Round((double)conforming / evaluated * 100, 1) : null;
+            var partial = v.Items.Count(i => i.Result == EvaluationResult.Parcial);
+            var evaluated = conforming + nonConforming + partial;
+            double? compliance = evaluated > 0 ? Math.Round(((double)conforming + 0.5 * partial) / evaluated * 100, 1) : null;
 
             return new VisitDto(
                 v.Id,
@@ -92,8 +93,9 @@ public class VisitService
 
         var conforming = v.Items.Count(i => i.Result == EvaluationResult.Conforme);
         var nonConforming = v.Items.Count(i => i.Result == EvaluationResult.NaoConforme);
-        var evaluated = conforming + nonConforming;
-        double? compliance = evaluated > 0 ? Math.Round((double)conforming / evaluated * 100, 1) : null;
+        var partial = v.Items.Count(i => i.Result == EvaluationResult.Parcial);
+        var evaluated = conforming + nonConforming + partial;
+        double? compliance = evaluated > 0 ? Math.Round(((double)conforming + 0.5 * partial) / evaluated * 100, 1) : null;
 
         var itemsDto = v.Items.Select(i => new VisitItemDto(
             i.Id,
@@ -287,8 +289,8 @@ public class VisitService
                     existingItem.Observation = eval.Observation;
                 }
 
-                // If non-conforming, register or link NonConformity
-                if (eval.Result == EvaluationResult.NaoConforme && eval.NonConformity != null)
+                // If non-conforming or partial, register or link NonConformity
+                if ((eval.Result == EvaluationResult.NaoConforme || eval.Result == EvaluationResult.Parcial) && eval.NonConformity != null)
                 {
                     var checklistItem = await _context.ChecklistItems.FirstOrDefaultAsync(ci => ci.Id == eval.ChecklistItemId);
                     var category = !string.IsNullOrWhiteSpace(eval.NonConformity.Category) ? eval.NonConformity.Category : (checklistItem?.Category ?? "Geral");
@@ -351,5 +353,55 @@ public class VisitService
 
         await _context.SaveChangesAsync();
         return await GetByIdAsync(id);
+    }
+
+    public async Task<VisitDetailDto> CancelVisitAsync(Guid id, string? reason = null)
+    {
+        var visit = await _context.Visits
+            .FirstOrDefaultAsync(v => v.Id == id && !v.IsDeleted);
+
+        if (visit == null) throw new KeyNotFoundException("Visita técnica não encontrada.");
+
+        if (visit.Status == VisitStatus.Cancelled)
+            throw new InvalidOperationException("Esta visita técnica já se encontra desmarcada.");
+
+        visit.Status = VisitStatus.Cancelled;
+        if (!string.IsNullOrWhiteSpace(reason))
+        {
+            visit.Notes = string.IsNullOrWhiteSpace(visit.Notes)
+                ? $"[Desmarcada]: {reason.Trim()}"
+                : $"{visit.Notes}\n[Desmarcada]: {reason.Trim()}";
+        }
+        visit.UpdatedAt = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync();
+        return await GetByIdAsync(id);
+    }
+
+    public async Task DeleteAsync(Guid id)
+    {
+        var visit = await _context.Visits
+            .Include(v => v.NonConformities)
+                .ThenInclude(nc => nc.Actions)
+            .FirstOrDefaultAsync(v => v.Id == id && !v.IsDeleted);
+
+        if (visit == null) throw new KeyNotFoundException("Visita técnica não encontrada.");
+
+        visit.IsDeleted = true;
+        visit.DeletedAt = DateTime.UtcNow;
+
+        foreach (var nc in visit.NonConformities.Where(nc => !nc.IsDeleted))
+        {
+            nc.IsDeleted = true;
+            nc.DeletedAt = DateTime.UtcNow;
+
+            foreach (var action in nc.Actions.Where(a => !a.IsDeleted))
+            {
+                action.IsDeleted = true;
+                action.DeletedAt = DateTime.UtcNow;
+            }
+        }
+
+        await _context.SaveChangesAsync();
     }
 }

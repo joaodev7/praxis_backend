@@ -35,8 +35,9 @@ public class DashboardService
 
         var totalConforme = allFinishedVisitItems.Count(i => i.Result == EvaluationResult.Conforme);
         var totalNaoConforme = allFinishedVisitItems.Count(i => i.Result == EvaluationResult.NaoConforme);
-        var totalEvaluated = totalConforme + totalNaoConforme;
-        double averageComplianceRate = totalEvaluated > 0 ? Math.Round((double)totalConforme / totalEvaluated * 100, 1) : 100.0;
+        var totalParcial = allFinishedVisitItems.Count(i => i.Result == EvaluationResult.Parcial);
+        var totalEvaluated = totalConforme + totalNaoConforme + totalParcial;
+        double averageComplianceRate = totalEvaluated > 0 ? Math.Round(((double)totalConforme + 0.5 * totalParcial) / totalEvaluated * 100, 1) : 100.0;
 
         // Recent visits
         var recentVisits = await _context.Visits
@@ -54,8 +55,9 @@ public class DashboardService
         {
             var conf = v.Items.Count(i => i.Result == EvaluationResult.Conforme);
             var nonConf = v.Items.Count(i => i.Result == EvaluationResult.NaoConforme);
-            var eval = conf + nonConf;
-            double? comp = eval > 0 ? Math.Round((double)conf / eval * 100, 1) : null;
+            var parc = v.Items.Count(i => i.Result == EvaluationResult.Parcial);
+            var eval = conf + nonConf + parc;
+            double? comp = eval > 0 ? Math.Round(((double)conf + 0.5 * parc) / eval * 100, 1) : null;
             return new RecentVisitDto(v.Id, v.Unit?.ClientCompany?.TradeName ?? string.Empty, v.Unit?.Name ?? string.Empty, v.Nutritionist?.User?.Name ?? string.Empty, v.ScheduledAt, v.Status, comp);
         }).ToList();
 

@@ -113,6 +113,7 @@ public class PdfReportService : IPdfReportService
                     {
                         EvaluationResult.Conforme => "Conforme",
                         EvaluationResult.NaoConforme => "Não Conforme",
+                        EvaluationResult.Parcial => "Parcial",
                         _ => "N/A"
                     };
 
@@ -120,6 +121,7 @@ public class PdfReportService : IPdfReportService
                     {
                         EvaluationResult.Conforme => Colors.Green.Darken2,
                         EvaluationResult.NaoConforme => Colors.Red.Darken2,
+                        EvaluationResult.Parcial => Colors.Orange.Darken2,
                         _ => Colors.Grey.Darken1
                     };
 

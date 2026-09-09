@@ -48,7 +48,8 @@ public enum EvaluationResult
 {
     Conforme = 1,
     NaoConforme = 2,
-    NaoAplicavel = 3
+    NaoAplicavel = 3,
+    Parcial = 4
 }
 
 public enum NonConformitySeverity

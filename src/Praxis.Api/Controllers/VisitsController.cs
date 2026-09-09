@@ -79,4 +79,19 @@ public class VisitsController : ControllerBase
         var pdfBytes = _pdfReportService.GenerateVisitReportPdf(visit);
         return File(pdfBytes, "application/pdf", $"relatorio-visita-{visit.Unit?.Name ?? "unidade"}-{visit.ScheduledAt:yyyyMMdd}.pdf");
     }
+
+    [HttpPost("{id:guid}/cancel")]
+    [HttpPut("{id:guid}/cancel")]
+    public async Task<ActionResult<VisitDetailDto>> Cancel(Guid id, [FromBody] CancelVisitRequest? request = null)
+    {
+        var item = await _visitService.CancelVisitAsync(id, request?.Reason);
+        return Ok(item);
+    }
+
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> Delete(Guid id)
+    {
+        await _visitService.DeleteAsync(id);
+        return NoContent();
+    }
 }
