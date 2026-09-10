@@ -11,99 +11,75 @@ public static class DbInitializer
     {
         await EnsureTablesCreatedAsync(context, logger);
 
-        // 1. Seed Plans if not present
-        if (!await context.Plans.IgnoreQueryFilters().AnyAsync())
+        // 1. Seed or Update Plans to match current commercial catalog
+        var existingPlans = await context.Plans.IgnoreQueryFilters().Include(p => p.Features).ToListAsync();
+
+        // 1.1 Plano Profissional Autônomo (essential)
+        var planEssential = existingPlans.FirstOrDefault(p => p.Code.Equals("essential", StringComparison.OrdinalIgnoreCase));
+        if (planEssential == null)
         {
-            var planEssential = new Plan
-            {
-                Name = "PRAXIS Essencial",
-                Code = "essential",
-                Description = "Ideal para pequenas consultorias e empresas que estão estruturando sua operação.",
-                MonthlyPrice = 149.00m,
-                AnnualPrice = 1490.00m,
-                MaxNutritionists = 3,
-                MaxClientCompanies = 10,
-                MaxStorageMb = 1000,
-                IsActive = true,
-                Features = new List<PlanFeature>
-                {
-                    new() { FeatureCode = "dashboard", IsEnabled = true },
-                    new() { FeatureCode = "clients", IsEnabled = true },
-                    new() { FeatureCode = "units", IsEnabled = true },
-                    new() { FeatureCode = "nutritionists", IsEnabled = true },
-                    new() { FeatureCode = "arts", IsEnabled = true },
-                    new() { FeatureCode = "visits", IsEnabled = true },
-                    new() { FeatureCode = "checklists", IsEnabled = true },
-                    new() { FeatureCode = "photos", IsEnabled = true },
-                    new() { FeatureCode = "pdf_export", IsEnabled = true }
-                }
-            };
-
-            var planProfessional = new Plan
-            {
-                Name = "PRAXIS Profissional",
-                Code = "professional",
-                Description = "Para consultorias em crescimento que precisam de indicadores e gestão mais completa.",
-                MonthlyPrice = 299.00m,
-                AnnualPrice = 2990.00m,
-                MaxNutritionists = 10,
-                MaxClientCompanies = 50,
-                MaxStorageMb = 5000,
-                IsActive = true,
-                Features = new List<PlanFeature>
-                {
-                    new() { FeatureCode = "dashboard", IsEnabled = true },
-                    new() { FeatureCode = "clients", IsEnabled = true },
-                    new() { FeatureCode = "units", IsEnabled = true },
-                    new() { FeatureCode = "nutritionists", IsEnabled = true },
-                    new() { FeatureCode = "arts", IsEnabled = true },
-                    new() { FeatureCode = "visits", IsEnabled = true },
-                    new() { FeatureCode = "checklists", IsEnabled = true },
-                    new() { FeatureCode = "photos", IsEnabled = true },
-                    new() { FeatureCode = "pdf_export", IsEnabled = true },
-                    new() { FeatureCode = "advanced_analytics", IsEnabled = true },
-                    new() { FeatureCode = "period_comparison", IsEnabled = true },
-                    new() { FeatureCode = "excel_export", IsEnabled = true },
-                    new() { FeatureCode = "custom_reports", IsEnabled = true },
-                    new() { FeatureCode = "priority_support", IsEnabled = true }
-                }
-            };
-
-            var planEnterprise = new Plan
-            {
-                Name = "PRAXIS Enterprise",
-                Code = "enterprise",
-                Description = "Operações maiores ou redes com necessidades específicas e limites personalizados.",
-                MonthlyPrice = 0.00m,
-                AnnualPrice = 0.00m,
-                MaxNutritionists = 999,
-                MaxClientCompanies = 999,
-                MaxStorageMb = 50000,
-                IsActive = true,
-                Features = new List<PlanFeature>
-                {
-                    new() { FeatureCode = "dashboard", IsEnabled = true },
-                    new() { FeatureCode = "clients", IsEnabled = true },
-                    new() { FeatureCode = "units", IsEnabled = true },
-                    new() { FeatureCode = "nutritionists", IsEnabled = true },
-                    new() { FeatureCode = "arts", IsEnabled = true },
-                    new() { FeatureCode = "visits", IsEnabled = true },
-                    new() { FeatureCode = "checklists", IsEnabled = true },
-                    new() { FeatureCode = "photos", IsEnabled = true },
-                    new() { FeatureCode = "pdf_export", IsEnabled = true },
-                    new() { FeatureCode = "advanced_analytics", IsEnabled = true },
-                    new() { FeatureCode = "period_comparison", IsEnabled = true },
-                    new() { FeatureCode = "excel_export", IsEnabled = true },
-                    new() { FeatureCode = "custom_reports", IsEnabled = true },
-                    new() { FeatureCode = "priority_support", IsEnabled = true },
-                    new() { FeatureCode = "dedicated_support", IsEnabled = true },
-                    new() { FeatureCode = "custom_integrations", IsEnabled = true }
-                }
-            };
-
-            context.Plans.AddRange(planEssential, planProfessional, planEnterprise);
-            await context.SaveChangesAsync();
+            planEssential = new Plan { Code = "essential" };
+            context.Plans.Add(planEssential);
         }
+        planEssential.Name = "Profissional Autônomo";
+        planEssential.Description = "Ideal para nutricionistas RTs autônomos que atendem até 5 estabelecimentos.";
+        planEssential.MonthlyPrice = 149.00m;
+        planEssential.AnnualPrice = 1490.00m;
+        planEssential.MaxNutritionists = 1;
+        planEssential.MaxClientCompanies = 5;
+        planEssential.MaxStorageMb = 1000;
+        planEssential.IsActive = true;
+        SyncPlanFeatures(planEssential, new[]
+        {
+            "dashboard", "clients", "units", "nutritionists", "arts", "visits", "checklists", "photos", "pdf_export", "food_labels"
+        });
+
+        // 1.2 Plano Consultoria Pro (professional)
+        var planProfessional = existingPlans.FirstOrDefault(p => p.Code.Equals("professional", StringComparison.OrdinalIgnoreCase));
+        if (planProfessional == null)
+        {
+            planProfessional = new Plan { Code = "professional" };
+            context.Plans.Add(planProfessional);
+        }
+        planProfessional.Name = "Consultoria Pro";
+        planProfessional.Description = "Para consultorias em expansão com múltiplos clientes e equipe de nutricionistas.";
+        planProfessional.MonthlyPrice = 299.00m;
+        planProfessional.AnnualPrice = 2990.00m;
+        planProfessional.MaxNutritionists = 5;
+        planProfessional.MaxClientCompanies = 25;
+        planProfessional.MaxStorageMb = 5000;
+        planProfessional.IsActive = true;
+        SyncPlanFeatures(planProfessional, new[]
+        {
+            "dashboard", "clients", "units", "nutritionists", "arts", "visits", "checklists", "photos", "pdf_export",
+            "advanced_analytics", "period_comparison", "excel_export", "custom_reports", "priority_support",
+            "food_labels", "action_plans", "geolocation", "public_labels_qr"
+        });
+
+        // 1.3 Plano Consultoria Escala (enterprise)
+        var planEnterprise = existingPlans.FirstOrDefault(p => p.Code.Equals("enterprise", StringComparison.OrdinalIgnoreCase));
+        if (planEnterprise == null)
+        {
+            planEnterprise = new Plan { Code = "enterprise" };
+            context.Plans.Add(planEnterprise);
+        }
+        planEnterprise.Name = "Consultoria Escala";
+        planEnterprise.Description = "Para grandes consultorias, redes de franquias e empresas de alimentação coletiva.";
+        planEnterprise.MonthlyPrice = 549.00m;
+        planEnterprise.AnnualPrice = 5490.00m;
+        planEnterprise.MaxNutritionists = 999;
+        planEnterprise.MaxClientCompanies = 999;
+        planEnterprise.MaxStorageMb = 50000;
+        planEnterprise.IsActive = true;
+        SyncPlanFeatures(planEnterprise, new[]
+        {
+            "dashboard", "clients", "units", "nutritionists", "arts", "visits", "checklists", "photos", "pdf_export",
+            "advanced_analytics", "period_comparison", "excel_export", "custom_reports", "priority_support",
+            "food_labels", "action_plans", "geolocation", "public_labels_qr",
+            "dedicated_support", "custom_integrations", "sla_guarantee"
+        });
+
+        await context.SaveChangesAsync();
     }
 
     private static async Task EnsureTablesCreatedAsync(ApplicationDbContext context, ILogger? logger = null)
@@ -451,6 +427,18 @@ CREATE INDEX IF NOT EXISTS ""IX_FoodLabelAudits_UserId"" ON ""FoodLabelAudits"" 
         catch (Exception ex)
         {
             logger?.LogWarning(ex, "[EnsureTablesCreatedAsync] Aviso/Erro ao verificar tabelas: {Message}", ex.Message);
+        }
+    }
+
+    private static void SyncPlanFeatures(Plan plan, string[] featureCodes)
+    {
+        plan.Features ??= new List<PlanFeature>();
+        foreach (var code in featureCodes)
+        {
+            if (!plan.Features.Any(f => f.FeatureCode.Equals(code, StringComparison.OrdinalIgnoreCase)))
+            {
+                plan.Features.Add(new PlanFeature { FeatureCode = code, IsEnabled = true });
+            }
         }
     }
 }

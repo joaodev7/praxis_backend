@@ -111,8 +111,8 @@ public class EntitlementServiceTests : IDisposable
     public async Task ValidateLimitAsync_ShouldSucceed_WhenWithinLimit()
     {
         var sub = await _context.Subscriptions.FirstAsync(s => s.TenantId == _tenantId);
-        var essential = await _context.Plans.FirstAsync(p => p.Code == "essential");
-        sub.PlanId = essential.Id; // limit: 3
+        var professional = await _context.Plans.FirstAsync(p => p.Code == "professional");
+        sub.PlanId = professional.Id; // limit: 5
         await _context.SaveChangesAsync();
 
         // Add 2 nutritionists with users

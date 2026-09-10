@@ -124,7 +124,7 @@ public class EntitlementService : IEntitlementService
             // If none, return default trial placeholder
             return new SubscriptionInfoDto
             {
-                PlanName = "Profissional (Trial)",
+                PlanName = "Consultoria Pro (Trial)",
                 PlanCode = "professional",
                 Status = SubscriptionStatus.Trial,
                 StatusDescription = "Período de Testes",
@@ -132,8 +132,8 @@ public class EntitlementService : IEntitlementService
                 StartedAt = DateTime.UtcNow,
                 DaysRemainingInTrial = 14,
                 CurrentPrice = 299.00m,
-                MaxNutritionists = 10,
-                MaxClientCompanies = 50,
+                MaxNutritionists = 5,
+                MaxClientCompanies = 25,
                 HasAccess = true
             };
         }
