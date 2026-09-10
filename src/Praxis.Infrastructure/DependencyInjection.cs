@@ -133,6 +133,10 @@ public static class DependencyInjection
         services.AddScoped<Praxis.Application.Interfaces.IAsaasWebhookService, Praxis.Infrastructure.Billing.PaymentProviders.Asaas.AsaasWebhookService>();
         services.AddHostedService<Praxis.Infrastructure.Billing.BackgroundJobs.BillingBackgroundService>();
 
+        // Etiquetagem e Gestão de Validade
+        services.AddSingleton<IQrCodeGenerator, QrCodeGenerator>();
+        services.AddScoped<ILabelPdfService, LabelPdfService>();
+
         return services;
     }
 

@@ -29,5 +29,14 @@ public interface IApplicationDbContext
     DbSet<StoredFile> Files { get; }
     DbSet<ActionPlanEvidence> ActionPlanEvidences { get; }
 
+    // Etiquetagem e Gestão de Validade
+    DbSet<Product> Products { get; }
+    DbSet<ProductBatch> ProductBatches { get; }
+    DbSet<ValidityRule> ValidityRules { get; }
+    DbSet<FoodLabel> FoodLabels { get; }
+    DbSet<LabelTemplate> LabelTemplates { get; }
+    DbSet<LabelPrint> LabelPrints { get; }
+    DbSet<FoodLabelAudit> FoodLabelAudits { get; }
+
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

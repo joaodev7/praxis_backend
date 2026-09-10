@@ -140,3 +140,55 @@ public enum FileStatus
     Uploaded = 2,
     Deleted = 3
 }
+
+public enum LabelOperationType
+{
+    Preparation = 1,
+    Opening = 2,
+    Portioning = 3,
+    Defrosting = 4,
+    PrePreparation = 5,
+    Storage = 6
+}
+
+public enum LabelType
+{
+    PreparedFood = 1,
+    OpenedProduct = 2,
+    PortionedProduct = 3,
+    PrePreparation = 4,
+    CommercialProduct = 5
+}
+
+public enum LabelStatus
+{
+    Active = 1,
+    Expired = 2,
+    Cancelled = 3,
+    Discarded = 4
+}
+
+public enum StorageCondition
+{
+    Ambient = 1,
+    Refrigerated = 2,
+    Frozen = 3,
+    Heated = 4,
+    Other = 5
+}
+
+public enum ValidityUnit
+{
+    Hours = 1,
+    Days = 2,
+    Weeks = 3,
+    Months = 4
+}
+
+public enum ValiditySource
+{
+    Rule = 1,
+    Manual = 2,
+    OriginalProduct = 3
+}
+

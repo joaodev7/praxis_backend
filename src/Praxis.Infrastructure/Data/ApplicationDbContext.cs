@@ -41,6 +41,15 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
     public DbSet<StoredFile> Files => Set<StoredFile>();
     public DbSet<ActionPlanEvidence> ActionPlanEvidences => Set<ActionPlanEvidence>();
 
+    // Etiquetagem e Gestão de Validade
+    public DbSet<Product> Products => Set<Product>();
+    public DbSet<ProductBatch> ProductBatches => Set<ProductBatch>();
+    public DbSet<ValidityRule> ValidityRules => Set<ValidityRule>();
+    public DbSet<FoodLabel> FoodLabels => Set<FoodLabel>();
+    public DbSet<LabelTemplate> LabelTemplates => Set<LabelTemplate>();
+    public DbSet<LabelPrint> LabelPrints => Set<LabelPrint>();
+    public DbSet<FoodLabelAudit> FoodLabelAudits => Set<FoodLabelAudit>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -234,6 +243,138 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
             entity.HasIndex(e => e.ActionPlanId);
             entity.HasIndex(e => e.TenantId);
             entity.HasIndex(e => e.ObjectKey);
+        });
+
+        // Etiquetagem e Gestão de Validade Configurations
+        modelBuilder.Entity<Product>(entity =>
+        {
+            entity.HasOne(p => p.Tenant)
+                  .WithMany()
+                  .HasForeignKey(p => p.TenantId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(p => p.Unit)
+                  .WithMany()
+                  .HasForeignKey(p => p.UnitId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(p => new { p.TenantId, p.UnitId });
+            entity.HasIndex(p => new { p.TenantId, p.Category });
+        });
+
+        modelBuilder.Entity<ProductBatch>(entity =>
+        {
+            entity.HasOne(b => b.Tenant)
+                  .WithMany()
+                  .HasForeignKey(b => b.TenantId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(b => b.Product)
+                  .WithMany(p => p.Batches)
+                  .HasForeignKey(b => b.ProductId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(b => new { b.TenantId, b.ProductId });
+            entity.HasIndex(b => new { b.TenantId, b.BatchCode });
+        });
+
+        modelBuilder.Entity<ValidityRule>(entity =>
+        {
+            entity.HasOne(r => r.Tenant)
+                  .WithMany()
+                  .HasForeignKey(r => r.TenantId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(r => r.Unit)
+                  .WithMany()
+                  .HasForeignKey(r => r.UnitId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(r => r.Product)
+                  .WithMany()
+                  .HasForeignKey(r => r.ProductId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(r => new { r.TenantId, r.IsActive, r.UnitId, r.ProductId });
+        });
+
+        modelBuilder.Entity<FoodLabel>(entity =>
+        {
+            entity.HasOne(l => l.Tenant)
+                  .WithMany()
+                  .HasForeignKey(l => l.TenantId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(l => l.Unit)
+                  .WithMany()
+                  .HasForeignKey(l => l.UnitId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(l => l.Product)
+                  .WithMany(p => p.FoodLabels)
+                  .HasForeignKey(l => l.ProductId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(l => l.ProductBatch)
+                  .WithMany(b => b.FoodLabels)
+                  .HasForeignKey(l => l.ProductBatchId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(l => l.ValidityRule)
+                  .WithMany(r => r.FoodLabels)
+                  .HasForeignKey(l => l.ValidityRuleId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(l => l.CreatedByUser)
+                  .WithMany()
+                  .HasForeignKey(l => l.CreatedByUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(l => l.CancelledByUser)
+                  .WithMany()
+                  .HasForeignKey(l => l.CancelledByUserId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(l => l.DiscardedByUser)
+                  .WithMany()
+                  .HasForeignKey(l => l.DiscardedByUserId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(l => new { l.TenantId, l.UnitId });
+            entity.HasIndex(l => new { l.TenantId, l.CalculatedExpirationDate });
+            entity.HasIndex(l => new { l.TenantId, l.ProductId });
+            entity.HasIndex(l => new { l.TenantId, l.InternalBatchCode });
+            entity.HasIndex(l => l.PublicToken).IsUnique();
+        });
+
+        modelBuilder.Entity<LabelPrint>(entity =>
+        {
+            entity.HasOne(p => p.Label)
+                  .WithMany(l => l.Prints)
+                  .HasForeignKey(p => p.LabelId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(p => p.PrintedByUser)
+                  .WithMany()
+                  .HasForeignKey(p => p.PrintedByUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(p => new { p.TenantId, p.LabelId });
+        });
+
+        modelBuilder.Entity<FoodLabelAudit>(entity =>
+        {
+            entity.HasOne(a => a.Label)
+                  .WithMany(l => l.Audits)
+                  .HasForeignKey(a => a.LabelId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(a => new { a.TenantId, a.LabelId });
+        });
+
+        modelBuilder.Entity<LabelTemplate>(entity =>
+        {
+            entity.HasIndex(t => new { t.TenantId, t.TemplateType });
         });
 
         // Apply Multi-tenancy & Soft Delete Query Filters to all relevant entities
