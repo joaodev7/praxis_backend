@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Praxis.Domain.Entities;
 using Praxis.Domain.Enums;
 
@@ -6,9 +7,9 @@ namespace Praxis.Infrastructure.Data;
 
 public static class DbInitializer
 {
-    public static async Task SeedAsync(ApplicationDbContext context)
+    public static async Task SeedAsync(ApplicationDbContext context, ILogger? logger = null)
     {
-        await EnsureTablesCreatedAsync(context);
+        await EnsureTablesCreatedAsync(context, logger);
 
         // 1. Seed Plans if not present
         if (!await context.Plans.IgnoreQueryFilters().AnyAsync())
@@ -105,7 +106,7 @@ public static class DbInitializer
         }
     }
 
-    private static async Task EnsureTablesCreatedAsync(ApplicationDbContext context)
+    private static async Task EnsureTablesCreatedAsync(ApplicationDbContext context, ILogger? logger = null)
     {
         try
         {
@@ -449,7 +450,7 @@ CREATE INDEX IF NOT EXISTS ""IX_FoodLabelAudits_UserId"" ON ""FoodLabelAudits"" 
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[EnsureTablesCreatedAsync] Aviso/Erro ao verificar tabelas: {ex.Message}");
+            logger?.LogWarning(ex, "[EnsureTablesCreatedAsync] Aviso/Erro ao verificar tabelas: {Message}", ex.Message);
         }
     }
 }

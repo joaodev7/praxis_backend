@@ -165,7 +165,7 @@ using (var scope = app.Services.CreateScope())
         {
             db.Database.EnsureCreated();
         }
-        await DbInitializer.SeedAsync(db);
+        await DbInitializer.SeedAsync(db, logger);
     }
     catch (Exception ex)
     {
