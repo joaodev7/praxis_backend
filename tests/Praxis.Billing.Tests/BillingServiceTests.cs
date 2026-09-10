@@ -47,9 +47,9 @@ public class BillingServiceTests : IDisposable
 
         plans.Should().NotBeNull();
         plans.Should().HaveCount(3);
-        plans[0].Code.Should().Be("enterprise");
-        plans[1].Code.Should().Be("essential");
-        plans[2].Code.Should().Be("professional");
+        plans[0].Code.Should().Be("essential");
+        plans[1].Code.Should().Be("professional");
+        plans[2].Code.Should().Be("enterprise");
     }
 
     [Fact]
@@ -202,15 +202,15 @@ public class BillingServiceTests : IDisposable
 
         // Assert
         result.PlanCode.Should().Be("professional");
-        result.MaxNutritionists.Should().Be(10);
-        result.MaxClientCompanies.Should().Be(50);
+        result.MaxNutritionists.Should().Be(5);
+        result.MaxClientCompanies.Should().Be(25);
         _paymentGatewayMock.Verify(g => g.ChangeSubscriptionAsync(It.Is<ChangeGatewaySubscriptionRequest>(r => r.ProviderSubscriptionId == "sub_upgrade_123" && r.Value == 299.00m), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
     public async Task DowngradePlanAsync_ShouldBlock_WhenCurrentEntitiesExceedTargetPlanLimits()
     {
-        // Arrange: Tenant has 15 clients (Essential allows max 10)
+        // Arrange: Tenant has 15 clients (Essential allows max 5)
         for (int i = 0; i < 15; i++)
         {
             _context.ClientCompanies.Add(new ClientCompany
@@ -227,7 +227,7 @@ public class BillingServiceTests : IDisposable
         // Act & Assert
         var act = () => _sut.DowngradePlanAsync(new DowngradePlanRequestDto { NewPlanCode = "essential" });
         await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("*Não é possível alterar para o plano PRAXIS Essencial*15 clientes*");
+            .WithMessage("*Não é possível alterar para o plano Profissional Autônomo*15 clientes*");
     }
 
     [Fact]

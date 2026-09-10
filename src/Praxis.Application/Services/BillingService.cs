@@ -60,7 +60,7 @@ public class BillingService : IBillingService
     {
         var tenantId = _currentUser.TenantId ?? throw new UnauthorizedAccessException("Tenant não identificado.");
 
-        var planCodeLower = request.PlanCode.ToLower();
+        var planCodeLower = NormalizePlanCode(request.PlanCode);
         var plan = await _context.Plans
             .FirstOrDefaultAsync(p => p.Code.ToLower() == planCodeLower && p.IsActive, ct)
             ?? throw new KeyNotFoundException($"Plano '{request.PlanCode}' não encontrado ou inativo.");
@@ -163,7 +163,7 @@ public class BillingService : IBillingService
     {
         var tenantId = _currentUser.TenantId ?? throw new UnauthorizedAccessException("Tenant não identificado.");
 
-        var newPlanCodeLower = request.NewPlanCode.ToLower();
+        var newPlanCodeLower = NormalizePlanCode(request.NewPlanCode);
         var newPlan = await _context.Plans
             .FirstOrDefaultAsync(p => p.Code.ToLower() == newPlanCodeLower && p.IsActive, ct)
             ?? throw new KeyNotFoundException($"Plano '{request.NewPlanCode}' não encontrado.");
@@ -198,7 +198,7 @@ public class BillingService : IBillingService
     {
         var tenantId = _currentUser.TenantId ?? throw new UnauthorizedAccessException("Tenant não identificado.");
 
-        var targetPlanCodeLower = request.NewPlanCode.ToLower();
+        var targetPlanCodeLower = NormalizePlanCode(request.NewPlanCode);
         var targetPlan = await _context.Plans
             .FirstOrDefaultAsync(p => p.Code.ToLower() == targetPlanCodeLower && p.IsActive, ct)
             ?? throw new KeyNotFoundException($"Plano '{request.NewPlanCode}' não encontrado.");
@@ -310,5 +310,18 @@ public class BillingService : IBillingService
             PaidAt = p.PaidAt,
             InvoiceUrl = p.InvoiceUrl
         }).ToList();
+    }
+
+    private static string NormalizePlanCode(string code)
+    {
+        if (string.IsNullOrWhiteSpace(code)) return string.Empty;
+        var lower = code.Trim().ToLowerInvariant();
+        return lower switch
+        {
+            "starter" or "autonomo" or "profissional_autonomo" => "essential",
+            "growth" or "pro" or "consultoria_pro" => "professional",
+            "escala" or "consultoria_escala" => "enterprise",
+            _ => lower
+        };
     }
 }

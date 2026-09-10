@@ -37,13 +37,13 @@ public static class TestDbContextFactory
             var planEssential = new Plan
             {
                 Id = Guid.NewGuid(),
-                Name = "PRAXIS Essencial",
+                Name = "Profissional Autônomo",
                 Code = "essential",
-                Description = "Plano Essencial",
+                Description = "Ideal para nutricionistas RTs autônomos que atendem até 5 estabelecimentos.",
                 MonthlyPrice = 149.00m,
                 AnnualPrice = 1490.00m,
-                MaxNutritionists = 3,
-                MaxClientCompanies = 10,
+                MaxNutritionists = 1,
+                MaxClientCompanies = 5,
                 MaxStorageMb = 1000,
                 IsActive = true,
                 Features = new List<PlanFeature>
@@ -58,13 +58,13 @@ public static class TestDbContextFactory
             var planProfessional = new Plan
             {
                 Id = Guid.NewGuid(),
-                Name = "PRAXIS Profissional",
+                Name = "Consultoria Pro",
                 Code = "professional",
-                Description = "Plano Profissional",
+                Description = "Para consultorias em expansão com múltiplos clientes e equipe de nutricionistas.",
                 MonthlyPrice = 299.00m,
                 AnnualPrice = 2990.00m,
-                MaxNutritionists = 10,
-                MaxClientCompanies = 50,
+                MaxNutritionists = 5,
+                MaxClientCompanies = 25,
                 MaxStorageMb = 5000,
                 IsActive = true,
                 Features = new List<PlanFeature>
@@ -81,11 +81,11 @@ public static class TestDbContextFactory
             var planEnterprise = new Plan
             {
                 Id = Guid.NewGuid(),
-                Name = "PRAXIS Enterprise",
+                Name = "Consultoria Escala",
                 Code = "enterprise",
-                Description = "Plano Enterprise",
-                MonthlyPrice = 0.00m,
-                AnnualPrice = 0.00m,
+                Description = "Para grandes consultorias, redes de franquias e empresas de alimentação coletiva.",
+                MonthlyPrice = 549.00m,
+                AnnualPrice = 5490.00m,
                 MaxNutritionists = 999,
                 MaxClientCompanies = 999,
                 MaxStorageMb = 50000,
