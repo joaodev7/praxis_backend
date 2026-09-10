@@ -146,15 +146,29 @@ app.MapGet("/health", () => Results.Ok(new { status = "Healthy", timestamp = Dat
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
+    var logger = services.GetRequiredService<ILogger<Program>>();
     try
     {
         var db = services.GetRequiredService<ApplicationDbContext>();
-        db.Database.EnsureCreated();
+        if (db.Database.IsRelational())
+        {
+            try
+            {
+                db.Database.Migrate();
+            }
+            catch (Exception migEx)
+            {
+                logger.LogWarning(migEx, "Aviso ao executar db.Database.Migrate(). Assegurando tabelas via DbInitializer.");
+            }
+        }
+        else
+        {
+            db.Database.EnsureCreated();
+        }
         await DbInitializer.SeedAsync(db);
     }
     catch (Exception ex)
     {
-        var logger = services.GetRequiredService<ILogger<Program>>();
         logger.LogError(ex, "Erro ao inicializar o banco de dados.");
     }
 }
