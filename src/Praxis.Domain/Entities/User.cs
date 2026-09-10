@@ -16,5 +16,10 @@ public class User : BaseEntity, ITenantEntity, ISoftDeletable
     public bool IsDeleted { get; set; }
     public DateTime? DeletedAt { get; set; }
 
+    public DateOnly? DateOfBirth { get; set; }
+    public string? ProfilePhotoKey { get; set; }
+    public string? ProfilePhotoUrl { get; set; }
+
     public Nutritionist? NutritionistProfile { get; set; }
 }
+

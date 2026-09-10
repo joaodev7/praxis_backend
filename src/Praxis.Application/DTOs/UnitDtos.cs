@@ -2,6 +2,16 @@ using Praxis.Domain.Enums;
 
 namespace Praxis.Application.DTOs;
 
+public record AssignedNutritionistDto(
+    Guid NutritionistId,
+    Guid UserId,
+    string Name,
+    string Email,
+    string Crn,
+    string Phone,
+    CommonStatus Status
+);
+
 public record UnitDto(
     Guid Id,
     Guid ClientCompanyId,
@@ -14,7 +24,8 @@ public record UnitDto(
     CommonStatus Status,
     DateTime CreatedAt,
     string? ActiveArtNumber,
-    int TotalVisits
+    int TotalVisits,
+    List<AssignedNutritionistDto>? AssignedNutritionists = null
 );
 
 public record CreateUnitRequest(

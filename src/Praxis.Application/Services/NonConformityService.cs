@@ -17,14 +17,16 @@ public class NonConformityService
         _currentUser = currentUser;
     }
 
-    public async Task<List<NonConformityDto>> GetAllAsync(NonConformityStatus? status = null, NonConformitySeverity? severity = null, Guid? unitId = null)
+    public async Task<List<NonConformityDto>> GetAllAsync(NonConformityStatus? status = null, NonConformitySeverity? severity = null, Guid? unitId = null, Guid? visitId = null)
     {
         var query = _context.NonConformities
             .Include(nc => nc.Visit)
                 .ThenInclude(v => v!.Unit)
                     .ThenInclude(u => u!.ClientCompany)
             .Include(nc => nc.Actions)
+                .ThenInclude(a => a.ResponsibleUser)
             .Include(nc => nc.Evidences)
+            .AsSplitQuery()
             .Where(nc => !nc.IsDeleted);
 
         if (status.HasValue)
@@ -35,6 +37,9 @@ public class NonConformityService
 
         if (unitId.HasValue)
             query = query.Where(nc => nc.Visit!.UnitId == unitId.Value);
+
+        if (visitId.HasValue)
+            query = query.Where(nc => nc.VisitId == visitId.Value);
 
         var list = await query.OrderByDescending(nc => nc.CreatedAt).ToListAsync();
 
@@ -57,7 +62,7 @@ public class NonConformityService
                 a.NonConformityId,
                 a.Description,
                 a.ResponsibleUserId,
-                null,
+                a.ResponsibleUser?.Name ?? a.ResponsibleName,
                 a.DueDate,
                 a.Status,
                 a.CompletedAt,
@@ -82,7 +87,9 @@ public class NonConformityService
                 .ThenInclude(v => v!.Unit)
                     .ThenInclude(u => u!.ClientCompany)
             .Include(nc => nc.Actions)
+                .ThenInclude(a => a.ResponsibleUser)
             .Include(nc => nc.Evidences)
+            .AsSplitQuery()
             .FirstOrDefaultAsync(nc => nc.Id == id && !nc.IsDeleted);
 
         if (nc == null) throw new KeyNotFoundException("Não conformidade não encontrada.");
@@ -106,7 +113,7 @@ public class NonConformityService
                 a.NonConformityId,
                 a.Description,
                 a.ResponsibleUserId,
-                null,
+                a.ResponsibleUser?.Name ?? a.ResponsibleName,
                 a.DueDate,
                 a.Status,
                 a.CompletedAt,
@@ -122,6 +129,47 @@ public class NonConformityService
                 e.UploadedByUserId
             )).ToList()
         );
+    }
+
+    public async Task<NonConformityDto> CreateForVisitAsync(Guid visitId, CreateNonConformityRequest request)
+    {
+        var visit = await _context.Visits
+            .Include(v => v.Unit)
+            .FirstOrDefaultAsync(v => v.Id == visitId && !v.IsDeleted);
+
+        if (visit == null) throw new KeyNotFoundException("Visita técnica/Auditoria não encontrada.");
+
+        var nc = new NonConformity
+        {
+            TenantId = visit.TenantId,
+            VisitId = visitId,
+            Category = string.IsNullOrWhiteSpace(request.Category) ? "Geral" : request.Category.Trim(),
+            Description = request.Description.Trim(),
+            Severity = request.Severity,
+            Status = NonConformityStatus.Aberta,
+            DueDate = request.DueDate ?? DateTime.UtcNow.AddDays(7),
+            CorrectiveAction = request.CorrectiveAction?.Trim()
+        };
+
+        if (request.InitialEvidenceUrls != null)
+        {
+            foreach (var url in request.InitialEvidenceUrls)
+            {
+                nc.Evidences.Add(new Evidence
+                {
+                    TenantId = visit.TenantId,
+                    Type = EvidenceType.Photo,
+                    Url = url,
+                    Description = "Evidência fotográfica registrada",
+                    UploadedByUserId = _currentUser.UserId
+                });
+            }
+        }
+
+        _context.NonConformities.Add(nc);
+        await _context.SaveChangesAsync();
+
+        return await GetByIdAsync(nc.Id);
     }
 
     public async Task<NonConformityDto> UpdateAsync(Guid id, UpdateNonConformityRequest request)

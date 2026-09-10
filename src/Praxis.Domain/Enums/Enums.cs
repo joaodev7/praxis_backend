@@ -48,7 +48,8 @@ public enum EvaluationResult
 {
     Conforme = 1,
     NaoConforme = 2,
-    NaoAplicavel = 3
+    NaoAplicavel = 3,
+    Parcial = 4
 }
 
 public enum NonConformitySeverity
@@ -71,8 +72,17 @@ public enum ActionItemStatus
 {
     Pendente = 1,
     EmAndamento = 2,
-    Concluida = 3,
-    Cancelada = 4
+    AguardandoValidacao = 3,
+    Concluida = 4,
+    Cancelada = 5
+}
+
+public enum ActionPlanPriority
+{
+    Baixa = 1,
+    Media = 2,
+    Alta = 3,
+    Critica = 4
 }
 
 public enum EvidenceType
@@ -114,3 +124,71 @@ public enum PaymentMethodType
     CreditCard = 2,
     Boleto = 3
 }
+
+public enum FileCategory
+{
+    ClientPhoto = 1,
+    Report = 2,
+    Evidence = 3,
+    Document = 4,
+    Other = 5
+}
+
+public enum FileStatus
+{
+    Pending = 1,
+    Uploaded = 2,
+    Deleted = 3
+}
+
+public enum LabelOperationType
+{
+    Preparation = 1,
+    Opening = 2,
+    Portioning = 3,
+    Defrosting = 4,
+    PrePreparation = 5,
+    Storage = 6
+}
+
+public enum LabelType
+{
+    PreparedFood = 1,
+    OpenedProduct = 2,
+    PortionedProduct = 3,
+    PrePreparation = 4,
+    CommercialProduct = 5
+}
+
+public enum LabelStatus
+{
+    Active = 1,
+    Expired = 2,
+    Cancelled = 3,
+    Discarded = 4
+}
+
+public enum StorageCondition
+{
+    Ambient = 1,
+    Refrigerated = 2,
+    Frozen = 3,
+    Heated = 4,
+    Other = 5
+}
+
+public enum ValidityUnit
+{
+    Hours = 1,
+    Days = 2,
+    Weeks = 3,
+    Months = 4
+}
+
+public enum ValiditySource
+{
+    Rule = 1,
+    Manual = 2,
+    OriginalProduct = 3
+}
+

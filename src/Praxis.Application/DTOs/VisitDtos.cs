@@ -73,3 +73,7 @@ public record FinishVisitRequest(
     string? Notes,
     List<RecordVisitEvaluationRequest>? Evaluations
 );
+
+public record CancelVisitRequest(
+    string? Reason
+);

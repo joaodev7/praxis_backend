@@ -28,5 +28,6 @@ public record UpdateNutritionistRequest(
     string Crn,
     string Phone,
     CommonStatus Status,
-    List<Guid>? AssignedUnitIds
+    string? Email = null,
+    List<Guid>? AssignedUnitIds = null
 );
