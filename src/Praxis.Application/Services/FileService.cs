@@ -190,7 +190,7 @@ public class FileService
         if (!existsInR2)
         {
             _logger.LogWarning("Tentativa de confirmação de upload com falha. Objeto {ObjectKey} não encontrado no R2.", file.ObjectKey);
-            throw new InvalidOperationException("O arquivo ainda não foi enviado para o Cloudflare R2 ou o upload direto pelo frontend não foi concluído.");
+            throw new InvalidOperationException("O arquivo ainda não foi enviado para o armazenamento ou o upload direto não foi concluído.");
         }
 
         file.Status = FileStatus.Uploaded;

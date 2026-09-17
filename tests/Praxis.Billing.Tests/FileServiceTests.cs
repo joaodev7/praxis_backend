@@ -265,7 +265,7 @@ public class FileServiceTests
         // Act & Assert
         var act = () => service.CompleteUploadAsync(file.Id);
         await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("*não foi enviado para o Cloudflare R2*");
+            .WithMessage("*não foi enviado para o armazenamento*");
     }
 
     [Fact]
