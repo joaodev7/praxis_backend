@@ -1,5 +1,7 @@
 using System.Net;
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Praxis.Api.Middlewares;
 
@@ -42,10 +44,33 @@ public class ExceptionMiddleware
             _ => (int)HttpStatusCode.InternalServerError
         };
 
-        context.Response.StatusCode = statusCode;
-
-        string message;
+        string message = exception.Message;
         string? detailed = null;
+
+        if (exception is DbUpdateException dbEx)
+        {
+            var innerMsg = dbEx.InnerException?.Message ?? string.Empty;
+            var isPostgresUnique = dbEx.InnerException is PostgresException pgEx && pgEx.SqlState == "23505";
+            var isDuplicate = isPostgresUnique || innerMsg.Contains("23505") || innerMsg.Contains("duplicate key", StringComparison.OrdinalIgnoreCase);
+
+            if (isDuplicate)
+            {
+                statusCode = (int)HttpStatusCode.Conflict;
+
+                if (innerMsg.Contains("IX_Users_Email", StringComparison.OrdinalIgnoreCase))
+                {
+                    message = "O e-mail informado já está em uso por outro usuário no sistema.";
+                }
+                else if (innerMsg.Contains("IX_Tenants_Cnpj", StringComparison.OrdinalIgnoreCase))
+                {
+                    message = "O CNPJ informado já está cadastrado por outra organização.";
+                }
+                else
+                {
+                    message = "Já existe um registro cadastrado com os dados informados.";
+                }
+            }
+        }
 
         if (statusCode == (int)HttpStatusCode.InternalServerError)
         {

@@ -73,15 +73,91 @@ public class NutritionistService
         // Validate plan limit before adding
         await _entitlementService.ValidateLimitAsync(tenantId, "max_nutritionists");
 
-        var existingUser = await _context.Users.AnyAsync(u => u.Email.ToLower() == request.Email.ToLower());
-        if (existingUser)
-            throw new InvalidOperationException("E-mail já está em uso.");
+        var normalizedEmail = request.Email.Trim().ToLower();
+
+        var existingUser = await _context.Users
+            .IgnoreQueryFilters()
+            .Include(u => u.NutritionistProfile)
+            .FirstOrDefaultAsync(u => u.Email.ToLower() == normalizedEmail);
+
+        if (existingUser != null)
+        {
+            if (existingUser.TenantId != tenantId)
+            {
+                throw new InvalidOperationException("Este e-mail já está associado a outra organização no sistema.");
+            }
+
+            if (!existingUser.IsDeleted)
+            {
+                throw new InvalidOperationException("Já existe um usuário ativo cadastrado com este e-mail.");
+            }
+
+            // Se o usuário foi soft-deleted na mesma organização, reativamos com os novos dados
+            existingUser.IsDeleted = false;
+            existingUser.DeletedAt = null;
+            existingUser.Name = request.Name.Trim();
+            existingUser.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password);
+            existingUser.Role = UserRole.Nutritionist;
+            existingUser.Status = UserStatus.Active;
+            existingUser.UpdatedAt = DateTime.UtcNow;
+
+            var existingNutritionist = existingUser.NutritionistProfile
+                ?? await _context.Nutritionists.IgnoreQueryFilters().FirstOrDefaultAsync(n => n.UserId == existingUser.Id);
+
+            if (existingNutritionist != null)
+            {
+                existingNutritionist.IsDeleted = false;
+                existingNutritionist.DeletedAt = null;
+                existingNutritionist.Crn = request.Crn.Trim();
+                existingNutritionist.Phone = request.Phone?.Trim() ?? string.Empty;
+                existingNutritionist.Status = CommonStatus.Active;
+                existingNutritionist.UpdatedAt = DateTime.UtcNow;
+
+                var existingAssignments = await _context.NutritionistUnitAssignments
+                    .IgnoreQueryFilters()
+                    .Where(nua => nua.NutritionistId == existingNutritionist.Id)
+                    .ToListAsync();
+                _context.NutritionistUnitAssignments.RemoveRange(existingAssignments);
+            }
+            else
+            {
+                existingNutritionist = new Nutritionist
+                {
+                    TenantId = tenantId,
+                    UserId = existingUser.Id,
+                    Crn = request.Crn.Trim(),
+                    Phone = request.Phone?.Trim() ?? string.Empty,
+                    Status = CommonStatus.Active
+                };
+                _context.Nutritionists.Add(existingNutritionist);
+            }
+
+            if (request.AssignedUnitIds != null && request.AssignedUnitIds.Any())
+            {
+                foreach (var unitId in request.AssignedUnitIds)
+                {
+                    var unitExists = await _context.Units.AnyAsync(u => u.Id == unitId && !u.IsDeleted);
+                    if (unitExists)
+                    {
+                        _context.NutritionistUnitAssignments.Add(new NutritionistUnitAssignment
+                        {
+                            TenantId = tenantId,
+                            NutritionistId = existingNutritionist.Id,
+                            UnitId = unitId
+                        });
+                    }
+                }
+            }
+
+            await _context.SaveChangesAsync();
+            return await GetByIdAsync(existingNutritionist.Id);
+        }
 
         var user = new User
         {
             TenantId = tenantId,
-            Name = request.Name,
-            Email = request.Email.ToLower(),
+            Name = request.Name.Trim(),
+            Email = normalizedEmail,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
             Role = UserRole.Nutritionist,
             Status = UserStatus.Active
@@ -93,8 +169,8 @@ public class NutritionistService
         {
             TenantId = tenantId,
             UserId = user.Id,
-            Crn = request.Crn,
-            Phone = request.Phone,
+            Crn = request.Crn.Trim(),
+            Phone = request.Phone?.Trim() ?? string.Empty,
             Status = CommonStatus.Active
         };
 
@@ -131,24 +207,31 @@ public class NutritionistService
 
         if (nutritionist == null) throw new KeyNotFoundException("Nutricionista não encontrado.");
 
-        nutritionist.Crn = request.Crn;
-        nutritionist.Phone = request.Phone;
+        nutritionist.Crn = request.Crn.Trim();
+        nutritionist.Phone = request.Phone?.Trim() ?? string.Empty;
         nutritionist.Status = request.Status;
         nutritionist.UpdatedAt = DateTime.UtcNow;
 
         if (nutritionist.User != null)
         {
-            nutritionist.User.Name = request.Name;
+            nutritionist.User.Name = request.Name.Trim();
             nutritionist.User.UpdatedAt = DateTime.UtcNow;
             nutritionist.User.Status = request.Status == CommonStatus.Active ? UserStatus.Active : UserStatus.Inactive;
 
-            if (!string.IsNullOrWhiteSpace(request.Email) && !nutritionist.User.Email.Equals(request.Email, StringComparison.OrdinalIgnoreCase))
+            if (!string.IsNullOrWhiteSpace(request.Email))
             {
-                var existingEmail = await _context.Users.AnyAsync(u => u.Email.ToLower() == request.Email.ToLower() && u.Id != nutritionist.UserId);
-                if (existingEmail)
-                    throw new InvalidOperationException("E-mail já está em uso por outro usuário.");
+                var normalizedEmail = request.Email.Trim().ToLower();
+                if (!nutritionist.User.Email.Equals(normalizedEmail, StringComparison.OrdinalIgnoreCase))
+                {
+                    var existingEmail = await _context.Users
+                        .IgnoreQueryFilters()
+                        .AnyAsync(u => u.Email.ToLower() == normalizedEmail && u.Id != nutritionist.UserId);
 
-                nutritionist.User.Email = request.Email.ToLower();
+                    if (existingEmail)
+                        throw new InvalidOperationException("E-mail já está em uso por outro usuário.");
+
+                    nutritionist.User.Email = normalizedEmail;
+                }
             }
         }
 
