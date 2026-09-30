@@ -21,7 +21,10 @@ public class AuthService
 
     public async Task<LoginResponse> RegisterTenantAsync(RegisterTenantRequest request)
     {
-        var existingEmail = await _context.Users.AnyAsync(u => u.Email.ToLower() == request.AdminEmail.ToLower());
+        var normalizedAdminEmail = request.AdminEmail.Trim().ToLower();
+        var existingEmail = await _context.Users
+            .IgnoreQueryFilters()
+            .AnyAsync(u => u.Email.ToLower() == normalizedAdminEmail);
         if (existingEmail)
             throw new InvalidOperationException("E-mail já cadastrado.");
 
