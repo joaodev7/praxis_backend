@@ -137,6 +137,31 @@ public static class DependencyInjection
         services.AddSingleton<IQrCodeGenerator, QrCodeGenerator>();
         services.AddScoped<ILabelPdfService, LabelPdfService>();
 
+        // Transactional Email Service
+        services.Configure<EmailOptions>(options =>
+        {
+            configuration.GetSection(EmailOptions.SectionName).Bind(options);
+
+            var smtpHost = configuration["SMTP_HOST"] ?? configuration["Email:SmtpHost"];
+            if (!string.IsNullOrWhiteSpace(smtpHost)) options.SmtpHost = smtpHost;
+
+            var smtpPortStr = configuration["SMTP_PORT"] ?? configuration["Email:SmtpPort"];
+            if (int.TryParse(smtpPortStr, out var smtpPort)) options.SmtpPort = smtpPort;
+
+            var smtpUser = configuration["SMTP_USER"] ?? configuration["Email:SmtpUser"];
+            if (!string.IsNullOrWhiteSpace(smtpUser)) options.SmtpUser = smtpUser;
+
+            var smtpPass = configuration["SMTP_PASS"] ?? configuration["Email:SmtpPass"];
+            if (!string.IsNullOrWhiteSpace(smtpPass)) options.SmtpPass = smtpPass;
+
+            var fromEmail = configuration["FROM_EMAIL"] ?? configuration["Email:FromEmail"];
+            if (!string.IsNullOrWhiteSpace(fromEmail)) options.FromEmail = fromEmail;
+
+            var appBaseUrl = configuration["APP_BASE_URL"] ?? configuration["Email:AppBaseUrl"];
+            if (!string.IsNullOrWhiteSpace(appBaseUrl)) options.AppBaseUrl = appBaseUrl;
+        });
+        services.AddScoped<IEmailService, SmtpEmailService>();
+
         return services;
     }
 

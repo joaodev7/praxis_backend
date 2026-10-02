@@ -1,4 +1,7 @@
+using System.Security.Cryptography;
+using System.Text;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Praxis.Application.DTOs;
 using Praxis.Application.Interfaces;
 using Praxis.Domain.Entities;
@@ -11,12 +14,21 @@ public class AuthService
     private readonly IApplicationDbContext _context;
     private readonly IJwtTokenService _jwtTokenService;
     private readonly ICurrentUserService _currentUser;
+    private readonly IEmailService _emailService;
+    private readonly IConfiguration _configuration;
 
-    public AuthService(IApplicationDbContext context, IJwtTokenService jwtTokenService, ICurrentUserService currentUser)
+    public AuthService(
+        IApplicationDbContext context,
+        IJwtTokenService jwtTokenService,
+        ICurrentUserService currentUser,
+        IEmailService emailService,
+        IConfiguration configuration)
     {
         _context = context;
         _jwtTokenService = jwtTokenService;
         _currentUser = currentUser;
+        _emailService = emailService;
+        _configuration = configuration;
     }
 
     public async Task<LoginResponse> RegisterTenantAsync(RegisterTenantRequest request)
@@ -237,5 +249,102 @@ public class AuthService
             associatedARTs = arts,
             associatedVisits = visits
         };
+    }
+
+    public async Task<AuthMessageResponse> ForgotPasswordAsync(ForgotPasswordRequest request, CancellationToken cancellationToken = default)
+    {
+        const string standardSuccessMessage = "Se o e-mail informado estiver cadastrado em nossa base, você receberá as instruções para redefinir sua senha em instantes.";
+
+        if (string.IsNullOrWhiteSpace(request.Email))
+            return new AuthMessageResponse(standardSuccessMessage);
+
+        var normalizedEmail = request.Email.Trim().ToLower();
+
+        var user = await _context.Users
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(u => u.Email.ToLower() == normalizedEmail && !u.IsDeleted, cancellationToken);
+
+        // Prevenção contra enumeração de usuários: sempre responde sucesso
+        if (user == null || user.Status != UserStatus.Active)
+        {
+            return new AuthMessageResponse(standardSuccessMessage);
+        }
+
+        // Gera token criptográfico seguro de 32 bytes (64 caracteres hex)
+        var rawTokenBytes = RandomNumberGenerator.GetBytes(32);
+        var rawToken = Convert.ToHexString(rawTokenBytes).ToLowerInvariant();
+
+        // Armazena no banco apenas o SHA-256 do token
+        user.PasswordResetTokenHash = ComputeSha256Hash(rawToken);
+        user.PasswordResetTokenExpiresAt = DateTime.UtcNow.AddHours(2);
+        user.UpdatedAt = DateTime.UtcNow;
+
+        _context.AuditLogs.Add(new AuditLog
+        {
+            TenantId = user.TenantId,
+            UserId = user.Id,
+            Action = "FORGOT_PASSWORD_REQUEST",
+            Entity = "User",
+            EntityId = user.Id.ToString(),
+            Metadata = $"Solicitação de redefinição de senha para {user.Email}"
+        });
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        var clientBaseUrl = _configuration["APP_BASE_URL"]
+            ?? _configuration["Email:AppBaseUrl"]
+            ?? "http://localhost:5173";
+        clientBaseUrl = clientBaseUrl.TrimEnd('/');
+
+        var resetLink = $"{clientBaseUrl}/redefinir-senha?token={rawToken}";
+
+        await _emailService.SendPasswordResetEmailAsync(user.Email, user.Name, resetLink, cancellationToken);
+
+        return new AuthMessageResponse(standardSuccessMessage);
+    }
+
+    public async Task<AuthMessageResponse> ResetPasswordAsync(ResetPasswordRequest request, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.Token))
+            throw new ArgumentException("Token de redefinição inválido.");
+
+        if (string.IsNullOrWhiteSpace(request.NewPassword) || request.NewPassword.Length < 8)
+            throw new ArgumentException("A nova senha deve possuir no mínimo 8 caracteres.");
+
+        var tokenHash = ComputeSha256Hash(request.Token.Trim());
+
+        var user = await _context.Users
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(u => u.PasswordResetTokenHash == tokenHash && !u.IsDeleted, cancellationToken);
+
+        if (user == null || user.PasswordResetTokenExpiresAt == null || user.PasswordResetTokenExpiresAt < DateTime.UtcNow)
+        {
+            throw new InvalidOperationException("O link de redefinição de senha é inválido ou já expirou. Por favor, solicite um novo link.");
+        }
+
+        user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
+        user.PasswordResetTokenHash = null;
+        user.PasswordResetTokenExpiresAt = null;
+        user.UpdatedAt = DateTime.UtcNow;
+
+        _context.AuditLogs.Add(new AuditLog
+        {
+            TenantId = user.TenantId,
+            UserId = user.Id,
+            Action = "PASSWORD_RESET_SUCCESS",
+            Entity = "User",
+            EntityId = user.Id.ToString(),
+            Metadata = $"Senha redefinida com sucesso para o usuário {user.Email}"
+        });
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return new AuthMessageResponse("Sua senha foi redefinida com sucesso! Você já pode fazer login com a nova senha.");
+    }
+
+    private static string ComputeSha256Hash(string rawData)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(rawData));
+        return Convert.ToHexString(bytes).ToLowerInvariant();
     }
 }

@@ -20,6 +20,9 @@ public class User : BaseEntity, ITenantEntity, ISoftDeletable
     public string? ProfilePhotoKey { get; set; }
     public string? ProfilePhotoUrl { get; set; }
 
+    public string? PasswordResetTokenHash { get; set; }
+    public DateTime? PasswordResetTokenExpiresAt { get; set; }
+
     public Nutritionist? NutritionistProfile { get; set; }
 }
 

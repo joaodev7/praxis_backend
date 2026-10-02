@@ -127,6 +127,8 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
             entity.Property(u => u.Name).HasMaxLength(150).IsRequired();
             entity.Property(u => u.ProfilePhotoKey).HasMaxLength(500);
             entity.Property(u => u.ProfilePhotoUrl).HasMaxLength(1000);
+            entity.Property(u => u.PasswordResetTokenHash).HasMaxLength(256);
+            entity.HasIndex(u => u.PasswordResetTokenHash);
             entity.HasOne(u => u.Tenant)
                   .WithMany(t => t.Users)
                   .HasForeignKey(u => u.TenantId)

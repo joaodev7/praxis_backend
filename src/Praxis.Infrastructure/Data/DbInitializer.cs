@@ -415,6 +415,10 @@ CREATE TABLE IF NOT EXISTS ""FoodLabelAudits"" (
 CREATE INDEX IF NOT EXISTS ""IX_FoodLabelAudits_LabelId"" ON ""FoodLabelAudits"" (""LabelId"");
 CREATE INDEX IF NOT EXISTS ""IX_FoodLabelAudits_TenantId_LabelId"" ON ""FoodLabelAudits"" (""TenantId"", ""LabelId"");
 CREATE INDEX IF NOT EXISTS ""IX_FoodLabelAudits_UserId"" ON ""FoodLabelAudits"" (""UserId"");
+
+ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""PasswordResetTokenHash"" text;
+ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""PasswordResetTokenExpiresAt"" timestamp with time zone;
+CREATE INDEX IF NOT EXISTS ""IX_Users_PasswordResetTokenHash"" ON ""Users"" (""PasswordResetTokenHash"");
 ";
                 await context.Database.ExecuteSqlRawAsync(sql);
             }
